@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Download, Menu, X } from "lucide-react";
-import Logo from "./Logo";
+import Logo from "./logo";
 import { DiscordIcon, GithubIcon, XIcon } from "./icons";
 import { SITE } from "@/lib/site";
 
@@ -21,27 +21,49 @@ export default function Navbar() {
           <Logo />
           <nav className="hidden items-center gap-8 md:flex">
             {LINKS.map((l) => (
-              <Link key={l.href} href={l.href} className="text-[15px] font-medium text-white/80 transition hover:text-white">
+              <Link
+                key={l.href}
+                href={l.href}
+                className="text-[15px] font-medium text-white/80 transition hover:text-white"
+              >
                 {l.label}
               </Link>
             ))}
           </nav>
         </div>
         <div className="flex items-center gap-5">
-          <a href={SITE.discord} aria-label="Discord" className="hidden text-white/70 transition hover:text-white sm:block">
+          <a
+            href={SITE.discord}
+            aria-label="Discord"
+            className="hidden text-white/70 transition hover:text-white sm:block"
+          >
             <DiscordIcon className="h-[18px] w-[18px]" />
           </a>
-          <a href={SITE.x} aria-label="X" className="hidden text-white/70 transition hover:text-white sm:block">
+          <a
+            href={SITE.x}
+            aria-label="X"
+            className="hidden text-white/70 transition hover:text-white sm:block"
+          >
             <XIcon className="h-4 w-4" />
           </a>
-          <a href={SITE.github} className="hidden items-center gap-2 text-[15px] font-medium text-white/70 transition hover:text-white sm:flex">
+          <a
+            href={SITE.github}
+            className="hidden items-center gap-2 text-[15px] font-medium text-white/70 transition hover:text-white sm:flex"
+          >
             <GithubIcon className="h-[18px] w-[18px]" />
             {SITE.stars}
           </a>
-          <Link href="/#download" className="flex items-center gap-2 rounded-lg bg-white px-4 py-2.5 text-[15px] font-medium text-black transition hover:bg-white/90">
+          <Link
+            href="/#download"
+            className="flex items-center gap-2 rounded-lg bg-white px-4 py-2.5 text-[15px] font-medium text-black transition hover:bg-white/90"
+          >
             <Download className="h-4 w-4" /> Download
           </Link>
-          <button className="text-white md:hidden" aria-label="Menu" onClick={() => setOpen((o) => !o)}>
+          <button
+            className="text-white md:hidden"
+            aria-label="Menu"
+            onClick={() => setOpen((o) => !o)}
+          >
             {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
         </div>
@@ -49,7 +71,12 @@ export default function Navbar() {
       {open && (
         <nav className="border-t border-white/[0.07] px-6 py-4 md:hidden">
           {LINKS.map((l) => (
-            <Link key={l.href} href={l.href} onClick={() => setOpen(false)} className="block py-2.5 text-[15px] text-white/80">
+            <Link
+              key={l.href}
+              href={l.href}
+              onClick={() => setOpen(false)}
+              className="block py-2.5 text-[15px] text-white/80"
+            >
               {l.label}
             </Link>
           ))}

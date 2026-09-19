@@ -1,11 +1,33 @@
 import Link from "next/link";
-import Logo from "./Logo";
+import Logo from "./logo";
 import { SITE } from "@/lib/site";
 
 const COLS = [
-  { title: "Product", links: [["Download", "/#download"], ["Changelog", "/changelog"], ["Enterprise", "/enterprise"], ["Docs", "/docs"]] },
-  { title: "Community", links: [["GitHub", SITE.github], ["Discord", SITE.discord], ["X", SITE.x]] },
-  { title: "Company", links: [["About", "/"], ["Privacy", "/"], ["Terms", "/"]] },
+  {
+    title: "Product",
+    links: [
+      ["Download", "/#download"],
+      ["Changelog", "/changelog"],
+      ["Enterprise", "/enterprise"],
+      ["Docs", "/docs"],
+    ],
+  },
+  {
+    title: "Community",
+    links: [
+      ["GitHub", SITE.github],
+      ["Discord", SITE.discord],
+      ["X", SITE.x],
+    ],
+  },
+  {
+    title: "Company",
+    links: [
+      ["About", "/"],
+      ["Privacy", "/"],
+      ["Terms", "/"],
+    ],
+  },
 ];
 
 export default function Footer() {
@@ -15,7 +37,8 @@ export default function Footer() {
         <div>
           <Logo />
           <p className="mt-6 max-w-sm text-[17px] leading-7 text-white/55">
-            The security control plane between AI-generated code and production. Build at AI speed, ship without AI risk.
+            The security control plane between AI-generated code and production.
+            Build at AI speed, ship without AI risk.
           </p>
         </div>
         {COLS.map((c) => (
@@ -25,9 +48,19 @@ export default function Footer() {
               {c.links.map(([label, href]) => (
                 <li key={label}>
                   {href.startsWith("http") ? (
-                    <a href={href} className="text-[16px] text-white/55 transition hover:text-white">{label}</a>
+                    <a
+                      href={href}
+                      className="text-[16px] text-white/55 transition hover:text-white"
+                    >
+                      {label}
+                    </a>
                   ) : (
-                    <Link href={href} className="text-[16px] text-white/55 transition hover:text-white">{label}</Link>
+                    <Link
+                      href={href}
+                      className="text-[16px] text-white/55 transition hover:text-white"
+                    >
+                      {label}
+                    </Link>
                   )}
                 </li>
               ))}

@@ -1,5 +1,5 @@
-import Hero from "@/components/Hero";
-import FeatureShowcase from "@/components/FeatureShowcase";
+import Hero from "@/components/hero";
+import FeatureShowcase from "@/components/featureShowcase";
 import DevLoop from "@/components/DevLoop";
 import SentinelScroll from "@/components/SentinelScroll";
 import MobileSection from "@/components/MobileSection";
