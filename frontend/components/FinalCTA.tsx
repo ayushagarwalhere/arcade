@@ -11,7 +11,7 @@ export default function FinalCTA() {
         <p className="mx-auto mt-6 max-w-xl text-[20px] text-white/50 md:text-[24px]">
           Get work done dramatically faster than in any IDE, and know it is safe to ship.
         </p>
-        <div className="mt-12"><DownloadActions secondary="discord" /></div>
+        <div className="mt-12"><DownloadActions secondary="docs" /></div>
       </Reveal>
     </section>
   );

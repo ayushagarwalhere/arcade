@@ -39,3 +39,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# electron desktop build
+/release/
+/dist/
+/build-resources/*.zip
+
+# large downloadable artifacts served by the site (built locally / via Releases)
+/public/download/

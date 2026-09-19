@@ -1,12 +1,13 @@
 "use client";
 import Link from "next/link";
 import { useState } from "react";
-import { Download, Menu, X } from "lucide-react";
+import { Download, Menu, SquareTerminal, X } from "lucide-react";
 import Logo from "./logo";
-import { DiscordIcon, GithubIcon, XIcon } from "./icons";
+import { GithubIcon } from "./icons";
 import { SITE } from "@/lib/site";
 
 const LINKS = [
+  { href: "/arcade", label: "ADE" },
   { href: "/docs", label: "Docs" },
   { href: "/changelog", label: "Changelog" },
   { href: "/enterprise", label: "Enterprise" },
@@ -31,28 +32,20 @@ export default function Navbar() {
             ))}
           </nav>
         </div>
-        <div className="flex items-center gap-5">
-          <a
-            href={SITE.discord}
-            aria-label="Discord"
-            className="hidden text-white/70 transition hover:text-white sm:block"
-          >
-            <DiscordIcon className="h-[18px] w-[18px]" />
-          </a>
-          <a
-            href={SITE.x}
-            aria-label="X"
-            className="hidden text-white/70 transition hover:text-white sm:block"
-          >
-            <XIcon className="h-4 w-4" />
-          </a>
+        <div className="flex items-center gap-4">
           <a
             href={SITE.github}
             className="hidden items-center gap-2 text-[15px] font-medium text-white/70 transition hover:text-white sm:flex"
           >
             <GithubIcon className="h-[18px] w-[18px]" />
-            {SITE.stars}
+            GitHub
           </a>
+          <Link
+            href={SITE.ade}
+            className="hidden items-center gap-2 rounded-lg border border-white/12 px-3.5 py-2.5 text-[15px] font-medium text-white/85 transition hover:bg-white/[0.06] sm:flex"
+          >
+            <SquareTerminal className="h-4 w-4 text-emerald-400" /> Open ADE
+          </Link>
           <Link
             href="/#download"
             className="flex items-center gap-2 rounded-lg bg-white px-4 py-2.5 text-[15px] font-medium text-black transition hover:bg-white/90"
@@ -80,6 +73,9 @@ export default function Navbar() {
               {l.label}
             </Link>
           ))}
+          <a href={SITE.github} className="block py-2.5 text-[15px] text-white/80">
+            GitHub
+          </a>
         </nav>
       )}
     </header>

@@ -19,13 +19,14 @@ export default function Hero() {
       <div className="relative mx-auto max-w-[1200px]">
         <div className="hero-in mx-auto flex w-fit items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] py-1.5 pl-3 pr-4 text-[14px] text-white/70">
           <ShieldCheck className="h-4 w-4 text-emerald-400" />
-          Meet Sentinel, the security team built into your IDE
+          The security control plane between AI-generated code and production
         </div>
         <h1 className="hero-in h-display mt-8 text-[44px] font-medium sm:text-[64px] lg:text-[92px]">
-          Ship 100x with the<br className="hidden sm:block" /> secure agent IDE
+          Build at AI speed.<br className="hidden sm:block" /> Ship at security confidence.
         </h1>
-        <p className="hero-in mx-auto mt-8 max-w-[860px] text-[18px] leading-[1.55] text-white/55 md:text-[24px]">
-          Run Claude Code, Codex, and any coding agent in parallel. Sentinel attacks what they build, fixes what breaks, and proves the fix worked before anything reaches production.
+        <p className="hero-in mx-auto mt-8 max-w-[880px] text-[18px] leading-[1.55] text-white/55 md:text-[24px]">
+          AI can build your application in hours. Arcade is a multi-agent security environment that maps it, attacks it in a
+          sandbox, fixes what breaks, and independently re-runs the attack to prove it is actually safe to ship.
         </p>
         <div className="hero-in mt-12">
           <DownloadActions />
