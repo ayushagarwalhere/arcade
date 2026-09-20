@@ -1,0 +1,19 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "paths": {
+      "@arcade/core/*": [
+        "../core/src/*"
+      ],
+      "@arcade/agents/*": [
+        "../agents/src/*"
+      ],
+      "@arcade/orchestrator/*": [
+        "../orchestrator/src/*"
+      ]
+    }
+  },
+  "include": [
+    "src"
+  ]
+}

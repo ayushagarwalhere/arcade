@@ -1,0 +1,5 @@
+@import "tailwindcss";
+@import "../../../../packages/ui/src/styles/theme.css";
+
+/* Tailwind only scans this app by default; class names also live in the shared packages. */
+@source "../../../../packages";

@@ -1,0 +1,23 @@
+{
+  "name": "@arcade/core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Arcade's platform-neutral core: data model, run engine, scanner, workspace and GitHub file systems.",
+  "sideEffects": false,
+  "exports": {
+    "./*": [
+      "./src/*.ts",
+      "./src/*.tsx"
+    ]
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "react": "19.2.8"
+  },
+  "devDependencies": {
+    "@types/react": "^19",
+    "typescript": "^5"
+  }
+}

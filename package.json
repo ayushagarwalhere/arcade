@@ -1,0 +1,30 @@
+{
+  "name": "arcade-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Arcade — a security ADE for AI-generated software",
+  "workspaces": [
+    "apps/marketing",
+    "apps/ade",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev:ade",
+    "dev:marketing": "npm run dev -w apps/marketing",
+    "dev:ade": "npm run dev -w apps/ade",
+    "build": "npm run build --workspaces --if-present",
+    "build:web": "node scripts/build-web.mjs",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "desktop:electron": "npm run desktop:electron -w apps/ade",
+    "desktop:preview": "npm run desktop:preview -w apps/ade",
+    "desktop:pack": "npm run desktop:pack -w apps/ade",
+    "desktop:build": "npm run desktop:build -w apps/ade",
+    "desktop:build:win": "npm run desktop:build:win -w apps/ade",
+    "cli": "node packages/cli/arcade.mjs",
+    "mcp": "node packages/cli/mcp-server.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

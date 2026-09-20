@@ -1,0 +1,31 @@
+{
+  "name": "@arcade/ui",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Components, hooks and the theme shared by the marketing site and the ADE.",
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "exports": {
+    "./*": [
+      "./src/*.ts",
+      "./src/*.tsx"
+    ],
+    "./styles/*": "./src/styles/*"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@arcade/core": "*",
+    "lucide-react": "^1.47.0"
+  },
+  "peerDependencies": {
+    "next": "16.3.5",
+    "react": "19.2.8"
+  },
+  "devDependencies": {
+    "@types/react": "^19",
+    "typescript": "^5"
+  }
+}

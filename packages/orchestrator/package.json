@@ -1,0 +1,24 @@
+{
+  "name": "@arcade/orchestrator",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Runs the agents: the assessment pipeline and the live run engine.",
+  "sideEffects": false,
+  "exports": {
+    "./*": [
+      "./src/*.ts",
+      "./src/*.tsx"
+    ]
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@arcade/agents": "*",
+    "@arcade/core": "*"
+  },
+  "devDependencies": {
+    "@types/react": "^19",
+    "typescript": "^5"
+  }
+}

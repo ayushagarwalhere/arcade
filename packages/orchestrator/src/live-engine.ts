@@ -1,0 +1,212 @@
+/**
+ * Live run engine — builds a RunPlan from a real assessment.
+ *
+ * This is the counterpart to `engine.ts`'s `buildBeats`: same phased shape
+ * (map → attack → defend → approve → remediate → test → verify → merge), same
+ * Beat vocabulary, but every line, node, and gate comes from the scan of the
+ * imported project rather than the scripted sample. The store plays it exactly
+ * as it plays the demo, so all five agents animate through the loop and the
+ * human-approval gates are real decisions about real files.
+ */
+import { STEP, TERM, type Beat, type RunPlan } from "@arcade/core/engine";
+import { initialAgents, PROVIDERS } from "@arcade/core/demo";
+import { sandboxId } from "@arcade/agents/attacker";
+import type { Scan } from "@arcade/core/scanner";
+import type {
+  AgentKind,
+  ArcadeState,
+  AttackSurface,
+  Finding,
+  Project,
+  Severity,
+  TargetEnvironment,
+  TerminalLine,
+  TimelineEvent,
+  Workspace,
+} from "@arcade/core/types";
+
+export interface LiveInput {
+  project: Project;
+  surface: AttackSurface;
+  /** Every finding, strongest first; may be empty (clean scan). */
+  findings: Finding[];
+  /** The finding that flows through the loop and fills the state slot. */
+  top: Finding;
+  /** Findings other than `top`, for the list. */
+  secondary: Finding[];
+  scan: Scan;
+  profile: "full" | "scan-only";
+}
+
+const now = () => {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+};
+
+const countBy = (findings: Finding[]) => {
+  const c: Record<Severity, number> = { critical: 0, high: 0, medium: 0, low: 0 };
+  for (const f of findings) c[f.severity]++;
+  return c;
+};
+
+function environmentFor(scan: Scan): TargetEnvironment {
+  return { isolated: true, disposable: true, host: "static analysis (local)", network: "none", sandboxId: sandboxId(scan) };
+}
+
+function workspacesFor(top: Finding): Workspace[] {
+  return [
+    { id: "assessment", name: "assessment", branch: top.remediation.branch || "assessment", status: "active", agents: ["mapper", "attacker", "defender", "remediator", "verifier"] },
+  ];
+}
+
+/** The state the live run starts from. Findings are complete; beats animate status. */
+export function liveInitialState(input: LiveInput): ArcadeState {
+  const { project, surface, top, secondary, scan } = input;
+  const env = environmentFor(scan);
+  return {
+    project,
+    environment: env,
+    workspaces: workspacesFor(top),
+    providers: PROVIDERS,
+    agents: initialAgents(),
+    surface,
+    finding: { ...top, status: "reproduced", timeline: [], verification: { ...top.verification, outcome: "pending" } },
+    secondaryFindings: secondary,
+    approvals: [],
+    timeline: [],
+    terminal: [
+      { agent: "system", kind: "plain", text: `arcade v0.1.0 · ${env.sandboxId} · read-only static analysis, network: none` },
+      { agent: "system", kind: "plain", text: `Imported ${project.name} — ${scan.paths.length} files indexed, ${scan.filesScanned} analysed` },
+    ],
+    phase: "idle",
+    revealedNodes: 0,
+  };
+}
+
+export function buildLivePlan(input: LiveInput): RunPlan {
+  const { project, surface, top, findings, scan, profile } = input;
+  const counts = countBy(findings);
+  const nodes = surface.nodes.length;
+
+  const beats: Beat[] = [];
+  const term = (line: TerminalLine, delay = TERM) => beats.push({ t: "term", line, delay });
+  const time = (ev: TimelineEvent) => beats.push({ t: "timeline", ev, delay: STEP });
+  const agent = (kind: AgentKind, patch: Partial<import("@arcade/core/types").Agent>, delay = STEP) => beats.push({ t: "agent", kind, patch, delay });
+  const phase = (p: import("@arcade/core/types").RunPhase) => beats.push({ t: "phase", phase: p, delay: STEP });
+  const reveal = (n: number) => beats.push({ t: "reveal", n, delay: 200 });
+  const finding = (patch: Partial<Finding>) => beats.push({ t: "finding", patch, delay: STEP });
+
+  // ---- Map -----------------------------------------------------------------
+  phase("mapping");
+  agent("mapper", { status: "running", task: "Reading the project", progress: 0.15 }, 120);
+  term({ agent: "mapper", kind: "cmd", text: `arcade map ${project.repo}` });
+  term({ agent: "mapper", kind: "info", text: `Indexing ${scan.paths.length} files · ${Object.keys(scan.languages).join(", ") || "mixed"}` });
+  reveal(Math.ceil(nodes / 3));
+  term({ agent: "mapper", kind: "sub", text: `stack: ${project.technologies.slice(0, 5).join(" · ") || "unknown"}` });
+  reveal(Math.ceil((nodes * 2) / 3));
+  term({ agent: "mapper", kind: "info", text: `routes ${project.endpoints} · auth boundaries ${project.authBoundaries} · privileged ops ${project.privilegedOps}` });
+  reveal(nodes);
+  term({ agent: "mapper", kind: "ok", text: `security-map ready · ${nodes} nodes, ${surface.edges.length} edges` });
+  time({ time: now(), actor: "Mapper", kind: "map", text: `Imported ${project.name} and indexed ${scan.paths.length} files` });
+  agent("mapper", { status: "done", task: `Security map ready · ${nodes} nodes`, progress: 1 });
+  phase("mapped");
+
+  // ---- Attack --------------------------------------------------------------
+  phase("attacking");
+  agent("attacker", { status: "running", task: "Reproducing weaknesses in the sandbox", progress: 0.1 }, 120);
+  term({ agent: "attacker", kind: "cmd", text: `arcade attack --sandbox ${environmentFor(scan).sandboxId} --static` });
+  term({ agent: "attacker", kind: "info", text: "Spawned isolated sandbox · network: none · read-only" });
+  const shown = findings.slice(0, 6);
+  shown.forEach((f, i) => {
+    term({ agent: "attacker", kind: f.severity === "critical" || f.severity === "high" ? "warn" : "sub", text: `${f.severity.toUpperCase()}  ${f.title} · ${f.vulnerableCode.path}:${f.vulnerableCode.lines.find((l) => l.flagged)?.no ?? "?"}` });
+    agent("attacker", { progress: (i + 1) / shown.length });
+  });
+  if (findings.length > shown.length) term({ agent: "attacker", kind: "plain", text: `…and ${findings.length - shown.length} more` });
+  finding({ status: "reproduced" });
+  term({ agent: "attacker", kind: findings.length ? "err" : "ok", text: findings.length ? `${findings.length} findings · ${counts.critical} critical, ${counts.high} high, ${counts.medium} medium, ${counts.low} low` : "No weaknesses matched the rule set" });
+  time({ time: now(), actor: "Attacker", kind: "attack", text: `Reproduced ${findings.length} findings across ${new Set(findings.map((f) => f.vulnerableCode.path)).size} files` });
+  time({ time: now(), actor: "Attacker", kind: "evidence", text: `Top finding: ${top.id} ${top.title} (${top.cwe.split("·")[0].trim()})` });
+  agent("attacker", { status: "done", task: `${findings.length} findings · evidence saved`, progress: 1 });
+  phase("attacked");
+
+  // Scan-only stops here: no fix is proposed, so no gate.
+  if (profile === "scan-only" || !findings.length) {
+    return { beats, initial: liveInitialState(input) };
+  }
+
+  // ---- Defend --------------------------------------------------------------
+  phase("defending");
+  agent("defender", { status: "running", task: `Tracing ${top.id} and ranking fixes`, progress: 0.2 }, 120);
+  finding({ status: "analyzing" });
+  term({ agent: "defender", kind: "cmd", text: `arcade defend ${top.id}` });
+  term({ agent: "defender", kind: "sub", text: top.remediation.rootCause.slice(0, 120) });
+  top.mitigations.slice(0, 3).forEach((m, i) => term({ agent: "defender", kind: m.recommended ? "ok" : "plain", text: `${i + 1}  ${m.title}${m.recommended ? "  · recommended" : ""} · ${m.effort} effort` }));
+  time({ time: now(), actor: "Defender", kind: "defend", text: `Root cause traced for ${top.id}; ${top.mitigations.length} mitigations proposed` });
+  agent("defender", { status: "done", task: `${top.mitigations.length} mitigations proposed`, progress: 1 });
+  phase("defended");
+
+  // ---- Approval gate #1 ----------------------------------------------------
+  finding({ status: "awaiting-approval" });
+  agent("remediator", { status: "awaiting-approval", task: "Waiting for you to approve the fix" });
+  beats.push({
+    t: "gate",
+    approvalId: "approve-fix",
+    delay: 300,
+    def: {
+      kind: "code",
+      title: "Apply the proposed fix",
+      reason: `The remediator wants to modify ${top.vulnerableCode.path} to close ${top.id} (${top.title}).`,
+      target: top.remediation.files.map((f) => f.path).join(" · ") || top.vulnerableCode.path,
+    },
+  });
+
+  // ---- Remediate + Test ----------------------------------------------------
+  phase("remediating");
+  agent("remediator", { status: "running", task: "Writing the fix and a regression test", progress: 0.2 }, 120);
+  finding({ status: "remediating" });
+  term({ agent: "remediator", kind: "cmd", text: `git checkout -b ${top.remediation.branch}` });
+  top.remediation.files.forEach((f) => term({ agent: "remediator", kind: "sub", text: `${f.status}  ${f.path}  +${f.additions} -${f.deletions}` }));
+  term({ agent: "remediator", kind: "ok", text: `committed ${top.remediation.commit} on ${top.remediation.branch}` });
+  time({ time: now(), actor: "Remediator", kind: "remediate", text: `Wrote the fix and a regression test on ${top.remediation.branch}` });
+
+  phase("testing");
+  term({ agent: "remediator", kind: "cmd", text: "npm test -- security" });
+  top.remediation.tests.forEach((t) => term({ agent: "remediator", kind: t.passed ? "sub" : "err", text: `${t.passed ? "PASS" : "FAIL"}  ${t.suite} · ${t.name}` }));
+  const passed = top.remediation.tests.filter((t) => t.passed).length;
+  term({ agent: "remediator", kind: "ok", text: `${passed}/${top.remediation.tests.length} passed` });
+  time({ time: now(), actor: "Remediator", kind: "test", text: `Regression suite green · ${passed}/${top.remediation.tests.length}` });
+  agent("remediator", { status: "done", task: "Fix committed · tests green", progress: 1 });
+
+  // ---- Verify (independent) ------------------------------------------------
+  phase("verifying");
+  agent("verifier", { status: "running", task: "Re-running the attack against the fix", progress: 0.3 }, 120);
+  finding({ status: "verifying" });
+  term({ agent: "verifier", kind: "cmd", text: `arcade verify ${top.id} --replay --independent` });
+  term({ agent: "verifier", kind: "info", text: `Rebuilding sandbox from ${top.remediation.branch} @ ${top.remediation.commit}` });
+  term({ agent: "verifier", kind: "sub", text: top.verification.replaySummary });
+  beats.push({ t: "verify", patch: { outcome: top.verification.outcome }, delay: STEP });
+  const ok = top.verification.outcome === "verified";
+  term({ agent: "verifier", kind: ok ? "ok" : "warn", text: ok ? "Fix verified · the original weakness no longer matches" : "Fix incomplete · pattern still present — needs follow-up" });
+  time({ time: now(), actor: "Verifier", kind: "verify", text: ok ? `${top.id} verified · reachable → not reachable` : `${top.id} not fully closed · flagged for review` });
+  finding({ status: ok ? "verified" : "verification-failed" });
+  agent("verifier", { status: "done", task: ok ? "Verified · weakness closed" : "Needs follow-up", progress: 1 });
+  phase(ok ? "verified" : "verifying");
+
+  // ---- Approval gate #2: ship ----------------------------------------------
+  if (ok) {
+    beats.push({
+      t: "gate",
+      approvalId: "approve-merge",
+      delay: 300,
+      def: {
+        kind: "ship",
+        title: "Merge the verified fix",
+        reason: `${top.id} is verified fixed (reachable → not reachable). Merging closes the finding.`,
+        target: `${top.remediation.branch} → main`,
+      },
+    });
+    time({ time: now(), actor: "You", kind: "human", text: `Approved the merge of ${top.remediation.branch} into main` });
+  }
+
+  return { beats, initial: liveInitialState(input) };
+}

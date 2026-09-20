@@ -1,0 +1,163 @@
+import { SITE } from "@arcade/ui/lib/site";
+import type { DocPage } from "../types";
+import { code, figure, h2, h3, note, p, table, ul } from "../build";
+
+export const REFERENCE: DocPage[] = [
+  {
+    slug: "reference/statuses",
+    title: "Severity & status reference",
+    description: "Every value a severity, finding status, agent status, run phase and verification outcome can take.",
+    blocks: [
+      p("These values are stable. They appear in the workbench, in `--json` output from the CLI, and in MCP tool results — build against them with confidence."),
+      h2("Severity"),
+      table(
+        ["Severity", "Assigned when the reproduced exploit…"],
+        ["`critical`", "Reaches other users' data, privileged operations, or credentials, with no special access."],
+        ["`high`", "Is serious and reproducible, but needs a precondition — a valid account, a specific input, a particular state."],
+        ["`medium`", "Exposes something it shouldn't, with limited direct impact. Leaked test keys live here."],
+        ["`low`", "Is a missing hardening measure rather than a way in."],
+      ),
+      h2("Finding status"),
+      table(
+        ["Status", "Set by", "Meaning"],
+        ["`reproduced`", "Attacker", "Exploit proven, evidence captured."],
+        ["`analyzing`", "Defender", "Root cause being traced."],
+        ["`awaiting-approval`", "Defender", "A fix is proposed. Waiting on you."],
+        ["`remediating`", "Remediator", "Fix and regression test being written."],
+        ["`verifying`", "Verifier", "Original attack being replayed against the fix."],
+        ["`verified`", "Verifier", "Attack and all mutations fail; tests pass."],
+        ["`verification-failed`", "Verifier", "The attack still works."],
+      ),
+      h2("Verification outcome"),
+      table(["Outcome", "Meaning"], ["`pending`", "No verification has run yet."], ["`verified`", "The fix holds."], ["`failed`", "The fix does not hold."]),
+      h2("Agent status"),
+      table(
+        ["Status", "Meaning"],
+        ["`idle`", "Not needed yet."],
+        ["`queued`", "Waiting for the previous stage."],
+        ["`running`", "Working."],
+        ["`awaiting-approval`", "Waiting on a gate."],
+        ["`blocked`", "Cannot continue."],
+        ["`done`", "Finished; artifact handed on."],
+      ),
+      h2("Run phase"),
+      code(
+        "text",
+        `idle → mapping → mapped → attacking → attacked → defending → defended
+     → awaiting-fix-approval → remediating → testing → verifying → verified`,
+      ),
+      h2("Approval"),
+      table(["Field", "Values"], ["`kind`", "`code`, `ship`, `destructive`"], ["`status`", "`pending`, `approved`, `rejected`"]),
+      h2("Attack surface"),
+      table(
+        ["Field", "Values"],
+        ["Node `kind`", "`user`, `browser`, `api`, `auth`, `service`, `database`, `thirdparty`, `admin`, `secrets`"],
+        ["Node `risk`", "`safe`, `attention`, `vulnerable`"],
+      ),
+    ],
+  },
+
+  {
+    slug: "reference/security",
+    title: "Security & threat model",
+    description: "How Arcade is built to be safe to run against your code — and what it assumes.",
+    blocks: [
+      p("A tool that attacks applications has to be held to a higher standard than the applications it attacks. This page describes the boundaries Arcade enforces and the assumptions behind them."),
+      figure("architecture", "Arcade is a control plane. Agents never talk to each other directly — only through artifacts and gates."),
+      h2("What Arcade treats as untrusted"),
+      ul(
+        "**Agent output.** Anything a model produces — commands, diffs, claims — is a proposal until it's been executed in the sandbox or approved by a person.",
+        "**The code being scanned.** Including its dependencies, its scripts and its comments. A repository can contain text written to manipulate an agent.",
+        "**Third-party responses.** The sandbox has no network, so there aren't any.",
+      ),
+      h2("Boundaries"),
+      table(
+        ["Boundary", "Enforced by"],
+        ["Attacks never reach real systems", "Sandbox with `network: none` and throwaway credentials."],
+        ["Agents never edit your working tree", "The Remediator writes only to its own branch and worktree."],
+        ["Code never changes without consent", "The code approval gate."],
+        ["Nothing merges without consent", "The ship approval gate, shown with the verification summary."],
+        ["Irreversible actions are never batched", "Destructive approvals are granted once, per action."],
+        ["A fix can't vouch for itself", "The Verifier is a separate agent with a fresh context and sandbox."],
+        ["Connected agents can't self-approve", "MCP exposes `arcade_request_approval` but nothing that grants one."],
+      ),
+      h2("Least privilege by role"),
+      p("Each agent gets the narrowest access that lets it do its job — read-only for the Mapper and Defender, sandbox-only for the Attacker and Verifier, one branch for the Remediator. The full table is in [The five agents](doc:model/agents)."),
+      h2("Audit trail"),
+      p("Every agent action and every human decision is written to the finding's timeline with a timestamp and an actor. Approvals and rejections are recorded the same way as agent steps, so the history of a fix is complete."),
+      h2("Reporting a vulnerability"),
+      p(`Found a security issue in Arcade itself? Please report it privately through [GitHub security advisories](${SITE.github}/security/advisories/new) rather than a public issue.`),
+    ],
+  },
+
+  {
+    slug: "reference/privacy",
+    title: "Privacy & telemetry",
+    description: "What leaves your machine when you use Arcade. Short version: nothing we collect.",
+    blocks: [
+      h2("Telemetry"),
+      p("Arcade collects **no telemetry**. No usage analytics, no crash reporting, no identifiers. There's nothing to opt out of."),
+      h2("Your code"),
+      ul(
+        "The desktop app serves the workbench from inside its own bundle and runs fully offline.",
+        "The CLI and MCP server are local processes with no network calls and no dependencies.",
+        "Sandboxes run with `network: none`.",
+      ),
+      note("The coding agent you connect as a provider has its own data practices. Arcade doesn't proxy, store or inspect your provider credentials, and what your provider sends to its model is governed by that provider's terms."),
+      h2("Evidence files"),
+      p("Evidence is saved locally alongside the run (for example `evidence/ARC-001.json`). It can contain request bodies and response data from the sandboxed app. It stays on disk until you delete it or choose to share it."),
+      h2("Open source"),
+      p(`Arcade is developed in the open. You can read exactly what it does on [GitHub](${SITE.github}).`),
+    ],
+  },
+
+  {
+    slug: "reference/troubleshooting",
+    title: "Troubleshooting & FAQ",
+    description: "Quick answers to the things people hit first.",
+    blocks: [
+      h2("Workbench"),
+      h3("The run is stuck and nothing is happening"),
+      p("It's almost certainly waiting on you. Look for the approval indicator in the top bar, or press **Ctrl L** to open the agent pane — the pending request will be there."),
+      h3("I closed every tab"),
+      p("Press **Ctrl K** and pick a view, or use the Explorer in the sidebar."),
+      h3("I want to start over"),
+      p("Use **Reset** in the top bar, or run *Reset run* from the command palette. This clears the run; it doesn't touch your code."),
+      h3("The keyboard shortcuts don't work"),
+      p("Shortcuts are **Ctrl** on Windows and Linux and **⌘** on macOS, with no other modifier held. In the browser, some extensions capture Ctrl K or Ctrl L first — the desktop app doesn't have that problem."),
+
+      h2("CLI"),
+      h3("arcade: command not found"),
+      p("Run `npm link` inside `arcade/packages/cli`, or call it directly with `node packages/cli/arcade.mjs`. On Windows, open a new terminal after linking so your PATH refreshes."),
+      h3("arcade: no evidence captured for ARC-00x"),
+      p("Evidence is attached when the Attacker finishes reproducing a finding. Findings still being processed will have it once their run completes. Check progress with `arcade status`."),
+
+      h2("MCP"),
+      h3("My agent doesn't see the Arcade tools"),
+      ul(
+        "Confirm the path in your MCP config is **absolute**, or that you registered it from the repository root.",
+        "Run `node packages/cli/mcp-server.mjs` yourself. It should start silently and wait for input — any error prints immediately.",
+        "In Claude Code, run `/mcp` to see the server's status.",
+      ),
+      h3("arcade_request_approval always returns pending"),
+      p("That's by design. It stays pending until a person approves or rejects it in the workbench. See [Approval gates](doc:model/approvals)."),
+
+      h2("Building from source"),
+      h3("npm install breaks inside a synced folder (OneDrive, Dropbox, iCloud)"),
+      p("File-sync clients can evict or lock files inside `node_modules`. Keep `node_modules` outside the synced folder with a directory junction or symlink, then reinstall:"),
+      code("powershell", `New-Item -ItemType Junction -Path frontend\\node_modules -Target $env:LOCALAPPDATA\\arcade-nm`, "Windows"),
+      h3("Electron fails to launch in a headless or remote session"),
+      p("The desktop shell needs a display. Build the app with `npm run desktop:build` and run the packaged artifact on a machine with a desktop session."),
+
+      h2("FAQ"),
+      h3("Does Arcade replace my coding agent?"),
+      p("No. Arcade orchestrates the agents you already use and adds the security workflow around them. See [Bring your own agent](doc:agents/providers)."),
+      h3("Can Arcade fix things without asking me?"),
+      p("No, and there's no setting that makes it. Changing code and merging always stop at a gate."),
+      h3("Will it attack my production environment?"),
+      p("No. Attacks only run inside a disposable sandbox with no network access."),
+      h3("Still stuck?"),
+      p(`Open an issue on [GitHub](${SITE.issues}) or start a thread in [Discussions](${SITE.discussions}).`),
+    ],
+  },
+];

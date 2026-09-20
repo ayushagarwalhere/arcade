@@ -1,0 +1,322 @@
+/* Shared Arcade theme. Each app's app/globals.css imports Tailwind, then this file. */
+/*
+  Arcade design system — one developer-infrastructure language shared by the
+  marketing site and the Arcade ADE. Restrained palette: near-black grounds,
+  hairline borders, emerald / violet / amber as the only accents. Dark is the
+  default; the light theme is a remap of these same tokens (see "Themes" below).
+*/
+
+@theme {
+  /* Grounds */
+  --color-ink-950: #08090b;
+  --color-ink-900: #101114;
+  --color-ink-850: #141619;
+  --color-ink-800: #17191d;
+  --color-ink-700: #1f2226;
+
+  /* ADE workbench — neutral editor greys, used only by the /arcade shell */
+  --color-ade-chrome: #111111;
+  --color-ade-base: #151515;
+  --color-ade-editor: #1a1a1a;
+  --color-ade-raised: #202020;
+  --color-ade-hover: #272727;
+  --color-ade-line: #2a2a2a;
+  --color-ade-fg: #d7d7d7;
+  --color-ade-muted: #8c8c8c;
+  --color-ade-faint: #5e5e5e;
+
+  /* Typography */
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* Motion */
+  --animate-fade-in: fade-in 0.45s ease-out both;
+  --animate-blink: blink 1.05s step-end infinite;
+  --animate-signal: signal 2.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  --animate-pulse-ring: pulse-ring 2s ease-out infinite;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+@keyframes signal {
+  0% {
+    transform: translateY(-40px);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(260px);
+    opacity: 0;
+  }
+}
+
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.45);
+  }
+  70% {
+    box-shadow: 0 0 0 7px rgba(52, 211, 153, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/*
+  Themes. Dark is the default; `data-theme="light"` on <html> switches (set
+  before paint by the inline script in app/layout.tsx, toggled by lib/theme.ts).
+
+  Throughout the app `white` means "foreground" and `black` means "ground":
+  text-white/60, border-white/10, bg-black, bg-white text-black… Tailwind compiles
+  every one of those to var(--color-white) / var(--color-black), so light mode
+  swaps the two and the whole UI follows — primary buttons included. The accent
+  scales get the same treatment: 100–400 are only ever text, dots and strokes
+  tuned for dark grounds, so they map onto their 900–600 counterparts, while the
+  500s (tints, borders, rings) read fine on both and stay put.
+
+  `data-theme="dark"` on any subtree pins it dark inside a light page — used for
+  the canvas scenes, whose pixels are drawn for a black ground.
+*/
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --pop-shadow: 0 16px 60px rgba(0, 0, 0, 0.6);
+  --scrollbar-thumb: rgba(255, 255, 255, 0.13);
+  --grid-line: rgba(255, 255, 255, 0.03);
+  --selection: rgba(110, 231, 183, 0.28);
+
+  /* Editor syntax — Cursor-dark-like */
+  --syntax-plain: #d6d6dd;
+  --syntax-comment: #6d6d6d;
+  --syntax-string: #e394dc;
+  --syntax-number: #ebc88d;
+  --syntax-keyword: #83d6c5;
+  --syntax-type: #87c3ff;
+  --syntax-func: #efb080;
+  --syntax-const: #aaa0fa;
+  --syntax-prop: #aa9bf5;
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+
+  --color-white: #0b0c0e;
+  --color-black: #ffffff;
+
+  --color-ink-950: #fafafa;
+  --color-ink-900: #f6f6f7;
+  --color-ink-850: #f2f3f4;
+  --color-ink-800: #eeeff1;
+  --color-ink-700: #e6e7ea;
+
+  --color-ade-chrome: #f0f0f0;
+  --color-ade-base: #f7f7f7;
+  --color-ade-editor: #ffffff;
+  --color-ade-raised: #ffffff;
+  --color-ade-hover: #e9e9e9;
+  --color-ade-line: #e1e1e1;
+  --color-ade-fg: #2a2a2a;
+  --color-ade-muted: #6a6a6a;
+  --color-ade-faint: #9b9b9b;
+
+  --color-emerald-100: #004f3b;
+  --color-emerald-200: #006045;
+  --color-emerald-300: #007a55;
+  --color-emerald-400: #009966;
+  --color-violet-100: #4d179a;
+  --color-violet-200: #5d0ec0;
+  --color-violet-300: #7008e7;
+  --color-violet-400: #7f22fe;
+  --color-amber-100: #7b3306;
+  --color-amber-200: #973c00;
+  --color-amber-300: #bb4d00;
+  --color-amber-400: #e17100;
+  --color-red-200: #9f0712;
+  --color-red-300: #c10007;
+  --color-red-400: #e7000b;
+  --color-orange-300: #ca3500;
+  --color-orange-400: #f54900;
+  --color-cyan-300: #007595;
+  --color-sky-300: #0069a8;
+  --color-slate-300: #314158;
+  --color-slate-400: #62748e;
+
+  --pop-shadow: 0 12px 44px rgba(16, 18, 24, 0.16), 0 2px 8px rgba(16, 18, 24, 0.06);
+  --scrollbar-thumb: rgba(0, 0, 0, 0.18);
+  --grid-line: rgba(0, 0, 0, 0.045);
+  --selection: rgba(16, 185, 129, 0.24);
+
+  --syntax-plain: #24292f;
+  --syntax-comment: #8b919a;
+  --syntax-string: #a8246f;
+  --syntax-number: #9a6700;
+  --syntax-keyword: #0f766e;
+  --syntax-type: #0a5cc2;
+  --syntax-func: #b4540a;
+  --syntax-const: #6d4fd1;
+  --syntax-prop: #6a4bc4;
+}
+
+/* A dark island inside a light page: Tailwind's own defaults, restored. */
+[data-theme="light"] [data-theme="dark"] {
+  --color-white: #fff;
+  --color-black: #000;
+
+  --color-ink-950: #08090b;
+  --color-ink-900: #101114;
+  --color-ink-850: #141619;
+  --color-ink-800: #17191d;
+  --color-ink-700: #1f2226;
+
+  --color-ade-chrome: #111111;
+  --color-ade-base: #151515;
+  --color-ade-editor: #1a1a1a;
+  --color-ade-raised: #202020;
+  --color-ade-hover: #272727;
+  --color-ade-line: #2a2a2a;
+  --color-ade-fg: #d7d7d7;
+  --color-ade-muted: #8c8c8c;
+  --color-ade-faint: #5e5e5e;
+
+  --color-emerald-100: #d0fae5;
+  --color-emerald-200: #a4f4cf;
+  --color-emerald-300: #5ee9b5;
+  --color-emerald-400: #00d294;
+  --color-violet-100: #ede9fe;
+  --color-violet-200: #ddd6ff;
+  --color-violet-300: #c4b4ff;
+  --color-violet-400: #a685ff;
+  --color-amber-100: #fef3c6;
+  --color-amber-200: #fee685;
+  --color-amber-300: #ffd236;
+  --color-amber-400: #fcbb00;
+  --color-red-200: #ffcaca;
+  --color-red-300: #ffa3a3;
+  --color-red-400: #ff6568;
+  --color-orange-300: #ffb96d;
+  --color-orange-400: #ff8b1a;
+  --color-cyan-300: #53eafd;
+  --color-sky-300: #77d4ff;
+  --color-slate-300: #cad5e2;
+  --color-slate-400: #90a1b9;
+
+  color: var(--color-white);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--color-black);
+  color: var(--color-white);
+  font-family: var(--font-sans);
+  letter-spacing: -0.006em;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Layered so text-* / font-* utilities set directly on a control still win —
+   unlayered rules beat every Tailwind utility regardless of specificity. */
+@layer base {
+  button {
+    cursor: pointer;
+  }
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+    color: inherit;
+  }
+}
+
+/* Display headings: tight tracking, optical weight */
+.h-display {
+  letter-spacing: -0.035em;
+  line-height: 1.02;
+}
+
+/* Hide scrollbars while keeping scroll */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* Thin, self-effacing scrollbar for ADE panels */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+.scrollbar-thin::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 8px;
+}
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Faint grid backdrop used behind the ADE and hero */
+.bg-grid {
+  background-image:
+    linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+
+/* Light mode only: full pages sit on a black hairline grid instead of flat white.
+   `body` covers the marketing site, whose sections are transparent; `.page-ground`
+   is for full-page surfaces that paint their own ground (docs, the ADE welcome
+   screen). Workbench panels stay plain — a grid behind code and tables is noise. */
+[data-theme="light"] body,
+[data-theme="light"] .page-ground {
+  background-image:
+    linear-gradient(to right, rgba(0, 0, 0, 0.07) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.07) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+[data-theme="light"] .page-ground {
+  background-attachment: local; /* scroll with the content, as the body grid does */
+}
+
+::selection {
+  background: var(--selection);
+  color: var(--color-white);
+}
+
+/* Popovers, palettes and dialogs: a deep drop shadow on dark, a soft one on light. */
+.shadow-pop {
+  box-shadow: var(--pop-shadow);
+}

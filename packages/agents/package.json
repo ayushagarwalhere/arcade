@@ -1,0 +1,23 @@
+{
+  "name": "@arcade/agents",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Arcade's agents — mapper, attacker, defender, remediator, verifier — and the provider they run on.",
+  "sideEffects": false,
+  "exports": {
+    "./*": [
+      "./src/*.ts",
+      "./src/*.tsx"
+    ]
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@arcade/core": "*"
+  },
+  "devDependencies": {
+    "@types/react": "^19",
+    "typescript": "^5"
+  }
+}

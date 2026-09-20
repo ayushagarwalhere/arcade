@@ -1,0 +1,13 @@
+{
+  "name": "@arcade/cli",
+  "version": "0.1.0",
+  "description": "Arcade CLI and MCP server — drive the security ADE from the terminal or another agent.",
+  "type": "module",
+  "bin": {
+    "arcade": "./arcade.mjs"
+  },
+  "scripts": {
+    "mcp": "node ./mcp-server.mjs"
+  },
+  "license": "MIT"
+}
