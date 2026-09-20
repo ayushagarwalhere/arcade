@@ -1,0 +1,26 @@
+/**
+ * The text form of a finding that the false-positive classifier reads.
+ *
+ * Training (ml/generate.ts) and scoring (apps/api) must produce byte-identical
+ * shapes, so both build it here: the rule, the path, then the code window with
+ * the flagged line marked `>>>`.
+ */
+export interface WindowLine {
+  text: string;
+  flagged?: boolean;
+}
+
+const MAX_LINE = 240;
+
+export function findingText(ruleId: string, path: string, lines: WindowLine[]): string {
+  const body = lines.map((l) => `${l.flagged ? ">>> " : "    "}${l.text}`.slice(0, MAX_LINE)).join("\n");
+  return `rule: ${ruleId}\npath: ${path}\n${body}`;
+}
+
+/** Cut a ±`radius` window around a 1-based line of a whole file. */
+export function windowAround(source: string, line: number, radius = 8): WindowLine[] {
+  const all = source.split("\n");
+  const lo = Math.max(0, line - 1 - radius);
+  const hi = Math.min(all.length, line + radius);
+  return all.slice(lo, hi).map((text, i) => ({ text, flagged: lo + i === line - 1 }));
+}

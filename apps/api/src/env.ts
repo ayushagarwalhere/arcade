@@ -22,6 +22,8 @@ export interface Config {
     /** Largest source payload a single model request may carry. */
     maxSourceBytes: number;
   };
+  /** The SageMaker endpoint that scores findings; unset = findings are stored without a score. */
+  scoreEndpoint?: string;
   corsOrigins: string[];
 }
 
@@ -62,6 +64,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       monthlyTokenBudget: int(env.MODEL_MONTHLY_TOKEN_BUDGET, 5_000_000),
       maxSourceBytes: int(env.MODEL_MAX_SOURCE_BYTES, 200_000),
     },
+    scoreEndpoint: env.FP_ENDPOINT_NAME || undefined,
     corsOrigins: list(env.CORS_ORIGINS),
   };
 }

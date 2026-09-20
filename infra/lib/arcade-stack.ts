@@ -18,6 +18,8 @@ export interface ArcadeStackProps extends StackProps {
   monthlyTokenBudget: number;
   corsOrigins: string[];
   authCallbackUrls: string[];
+  /** Opt-in: the SageMaker endpoint from the separate ML stack (bin/ml.ts). Unset = the API stores findings unscored. */
+  fpEndpointName?: string;
 }
 
 const repoRoot = fileURLToPath(new URL("../../", import.meta.url));
@@ -99,10 +101,16 @@ export class ArcadeStack extends Stack {
         BEDROCK_MODEL_ID: props.bedrockModelId,
         MODEL_MONTHLY_TOKEN_BUDGET: String(props.monthlyTokenBudget),
         CORS_ORIGINS: props.corsOrigins.join(","),
+        ...(props.fpEndpointName ? { FP_ENDPOINT_NAME: props.fpEndpointName } : {}),
       },
     });
 
     table.grantReadWriteData(api);
+
+    // The false-positive classifier lives in its own stack; the API may invoke that one endpoint and nothing else.
+    if (props.fpEndpointName) {
+      api.addToRolePolicy(new iam.PolicyStatement({ actions: ["sagemaker:InvokeEndpoint"], resources: [`arn:aws:sagemaker:${this.region}:${this.account}:endpoint/${props.fpEndpointName}`] }));
+    }
 
     // Claude in Amazon Bedrock (the bedrock-mantle Messages endpoint) authorizes with this action.
     // The resource is open because the model ARN format for this service is not confirmed yet —

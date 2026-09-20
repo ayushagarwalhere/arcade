@@ -12,6 +12,7 @@ to the SageMaker channel / model-dir environment variable when it is set.
   python ml/train.py --train data/incoming/shard-0001.jsonl --holdout data/holdout.jsonl --out runs/round-1
 """
 import argparse
+import contextlib
 import json
 import os
 import random
@@ -30,7 +31,7 @@ def read_jsonl(path):
     paths = sorted(Path(path).glob("*.jsonl")) if Path(path).is_dir() else [Path(path)]
     rows = []
     for p in paths:
-        with open(p, encoding="utf-8") as f:
+        with open(p, encoding="utf-8-sig") as f:  # tolerate a BOM from Windows tools
             rows += [json.loads(line) for line in f if line.strip()]
     return rows
 
@@ -87,6 +88,11 @@ def fp_caught_at_recall(scores, labels, recall=0.99):
     return float((scores[labels == 0] < threshold).mean()), float(threshold)
 
 
+def mixed_precision(device):
+    """bf16 autocast on a GPU — roughly halves activation memory, which is what lets a 6 GB card train every layer."""
+    return torch.autocast(device_type="cuda", dtype=torch.bfloat16) if device.type == "cuda" else contextlib.nullcontext()
+
+
 @torch.no_grad()
 def evaluate(model, loader, rows, device):
     model.eval()
@@ -122,6 +128,7 @@ def main():
     ap.add_argument("--out", default=env.get("SM_MODEL_DIR", "runs/round"))
     ap.add_argument("--epochs", type=int, default=1)
     ap.add_argument("--batch", type=int, default=8)
+    ap.add_argument("--grad-accum", type=int, default=1, help="accumulate this many batches per optimizer step (effective batch = batch x grad-accum)")
     ap.add_argument("--lr", type=float, default=3e-5)
     ap.add_argument("--max-len", type=int, default=192)
     ap.add_argument("--weak-weight", type=float, default=0.5)
@@ -142,7 +149,8 @@ def main():
     started = time.time()
 
     tokenizer = AutoTokenizer.from_pretrained(args.init)
-    model = AutoModelForSequenceClassification.from_pretrained(args.init, num_labels=2).to(device)
+    # Checkpoints are stored in 16-bit (see the save below); training always happens in 32-bit master weights.
+    model = AutoModelForSequenceClassification.from_pretrained(args.init, num_labels=2).float().to(device)
 
     if args.freeze_layers:
         for p in model.base_model.embeddings.parameters():
@@ -160,31 +168,39 @@ def main():
     eval_loader = DataLoader(Findings(holdout, tokenizer, args.max_len, 1.0), batch_size=32, collate_fn=collate(tokenizer))
 
     optimizer = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=args.lr, weight_decay=0.01)
-    total = len(train_loader) * args.epochs
+    batches = len(train_loader) * args.epochs
+    total = max(1, batches // args.grad_accum)
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lambda s: min(1.0, (s + 1) / max(1, total // 10)) * max(0.0, (total - s) / total))
     loss_fn = torch.nn.CrossEntropyLoss(reduction="none")
 
-    step = 0
+    step = seen = 0
     for epoch in range(args.epochs):
         model.train()
         for batch in train_loader:
             labels, weights = batch.pop("labels").to(device), batch.pop("weights").to(device)
-            logits = model(**{k: v.to(device) for k, v in batch.items()}).logits
-            loss = (loss_fn(logits, labels) * weights).sum() / weights.sum()
-            loss.backward()
+            with mixed_precision(device):
+                logits = model(**{k: v.to(device) for k, v in batch.items()}).logits
+            loss = (loss_fn(logits.float(), labels) * weights).sum() / weights.sum()
+            (loss / args.grad_accum).backward()
+            seen += 1
+            if seen % args.grad_accum and seen != batches:
+                continue
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step(), scheduler.step(), optimizer.zero_grad()
             step += 1
-            if step % 10 == 0 or step == total:
+            if step % 10 == 0 or seen == batches:
                 print(f"  step {step}/{total}  loss {loss.item():.4f}  {time.time() - started:.0f}s", flush=True)
 
-    metrics = evaluate(model, eval_loader, holdout, device)
+    with mixed_precision(device):
+        metrics = evaluate(model, eval_loader, holdout, device)
     metrics.update({"init": args.init, "train_rows": len(rows), "seconds": round(time.time() - started), "device": str(device)})
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    model.save_pretrained(out), tokenizer.save_pretrained(out)
+    # Metrics first: they are what promotion reads, and they must survive even if saving weights fails.
     (out / "metrics.json").write_text(json.dumps(metrics, indent=2))
+    # Half precision halves the checkpoint (~250 MB); two checkpoints exist at once during a round.
+    model.half().save_pretrained(out), tokenizer.save_pretrained(out)
     print(json.dumps(metrics["overall"]), flush=True)
 
 

@@ -4,6 +4,7 @@ import { memoryStore } from "../src/db/memory";
 import type { Store } from "../src/db/store";
 import { loadConfig } from "../src/env";
 import type { ModelClient } from "../src/model/client";
+import type { ScoreClient } from "../src/score/client";
 
 /** A model that answers from a queue and records every prompt it was sent. */
 export function fakeModel(answers: unknown[] = []) {
@@ -19,10 +20,10 @@ export function fakeModel(answers: unknown[] = []) {
   return { client, calls };
 }
 
-export function harness(opts: { model?: ModelClient; env?: Record<string, string>; store?: Store } = {}) {
+export function harness(opts: { model?: ModelClient; scorer?: ScoreClient; env?: Record<string, string>; store?: Store } = {}) {
   const config = loadConfig({ ARCADE_AUTH: "dev", ARCADE_STORE: "memory", ...opts.env });
   const store = opts.store ?? memoryStore();
-  const app = createApp({ store, config, model: opts.model });
+  const app = createApp({ store, config, model: opts.model, scorer: opts.scorer });
 
   /** Call the API as a dev user, or with a raw bearer credential. */
   async function call(as: string | { bearer: string } | null, method: string, path: string, json?: unknown) {

@@ -73,6 +73,8 @@ export interface FindingRecord {
   runId: string;
   triage: Triage;
   assignee?: string;
+  /** The false-positive classifier's estimate; absent when the scorer was off, cold, or the finding was not scorable. */
+  score?: { pTruePositive: number; model: string; at: string };
   finding: Finding;
   createdAt: string;
   updatedAt: string;

@@ -16,6 +16,7 @@ import { bedrockModel } from "./model/client";
 import { modelRoutes } from "./routes/model";
 import { orgRoutes } from "./routes/orgs";
 import { runRoutes } from "./routes/runs";
+import { sagemakerScorer } from "./score/client";
 
 export function createApp(deps: Deps & { verifyJwt?: JwtVerifier }) {
   const { config, store } = deps;
@@ -54,5 +55,6 @@ export function createAppFromConfig(config: Config) {
   const store = config.store.kind === "memory" ? memoryStore() : dynamoStore({ tableName: config.store.tableName, region: config.region, endpoint: config.store.endpoint });
   const model = config.model.enabled ? bedrockModel({ region: config.model.region, modelId: config.model.modelId }) : undefined;
   const verifyJwt = config.auth.mode === "cognito" ? cognitoVerifier(config.auth) : undefined;
-  return createApp({ store, config, model, verifyJwt });
+  const scorer = config.scoreEndpoint ? sagemakerScorer({ endpointName: config.scoreEndpoint, region: config.region }) : undefined;
+  return createApp({ store, config, model, scorer, verifyJwt });
 }

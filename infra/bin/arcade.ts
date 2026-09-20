@@ -19,5 +19,6 @@ new ArcadeStack(app, `Arcade-${stage}`, {
   monthlyTokenBudget: Number(app.node.tryGetContext("monthlyTokenBudget")),
   corsOrigins: csv("corsOrigins"),
   authCallbackUrls: csv("authCallbackUrls"),
+  fpEndpointName: app.node.tryGetContext("fpEndpointName") ? String(app.node.tryGetContext("fpEndpointName")) : undefined,
   description: `Arcade backend (${stage})`,
 });

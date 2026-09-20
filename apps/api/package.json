@@ -22,6 +22,7 @@
     "@anthropic-ai/bedrock-sdk": "^0.33.7",
     "@anthropic-ai/sdk": "^0.127.0",
     "@aws-sdk/client-dynamodb": "^3.1136.0",
+    "@aws-sdk/client-sagemaker-runtime": "^3.1136.0",
     "@aws-sdk/lib-dynamodb": "^3.1136.0",
     "@hono/node-server": "^2.1.1",
     "aws-jwt-verify": "^5.2.1",

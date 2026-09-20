@@ -20,6 +20,7 @@
  */
 import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
+import { findingText, windowAround } from "../packages/core/src/finding-text";
 import { memoryFs } from "../packages/core/src/fs";
 import { scanWorkspace, type Hit } from "../packages/core/src/scanner";
 
@@ -66,16 +67,8 @@ const pick = <T>(r: R, xs: readonly T[]) => xs[Math.floor(r() * xs.length)];
 const hex = (r: R, n: number) => Array.from({ length: n }, () => "0123456789abcdef"[Math.floor(r() * 16)]).join("");
 const alnum = (r: R, n: number) => Array.from({ length: n }, () => "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789"[Math.floor(r() * 56)]).join("");
 
-function toText(ruleId: string, path: string, source: string, line: number): string {
-  const lines = source.split("\n");
-  const lo = Math.max(0, line - 1 - WINDOW);
-  const hi = Math.min(lines.length, line + WINDOW);
-  const body = lines
-    .slice(lo, hi)
-    .map((l, i) => (lo + i === line - 1 ? `>>> ${l}` : `    ${l}`).slice(0, 240))
-    .join("\n");
-  return `rule: ${ruleId}\npath: ${path}\n${body}`;
-}
+// Shared with the API's scorer, so the model is asked about exactly what it was trained on.
+const toText = (ruleId: string, path: string, source: string, line: number) => findingText(ruleId, path, windowAround(source, line, WINDOW));
 
 const rowOf = (hit: Hit, source: string, meta: Pick<Row, "source" | "group" | "label" | "weak">, n: number): Row => ({
   id: `${meta.group}:${hit.path}:${hit.match.line}:${hit.rule.id}:${n}`,

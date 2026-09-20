@@ -11,9 +11,10 @@ import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { APPROVER_ROLE, requireOrgRole, type AppEnv } from "../auth/auth";
 import type { AuditEvent, FindingRecord, RunRecord } from "../db/store";
-import { badRequest, conflict, forbidden, notFound } from "../errors";
+import { badRequest, conflict, forbidden, HttpError, notFound } from "../errors";
 import { body, pageQuery, type Deps } from "../http";
 import { newId } from "../ids";
+import { scoreFindings } from "../score/client";
 
 const severity = z.enum(["critical", "high", "medium", "low"]);
 const phase = z.enum(["idle", "mapping", "mapped", "attacking", "attacked", "defending", "defended", "awaiting-fix-approval", "remediating", "testing", "verifying", "verified"]);
@@ -32,7 +33,7 @@ const findingShape = z.looseObject({
 /** DynamoDB caps an item at 400 KB; leave headroom for keys and the record envelope. */
 const MAX_FINDING_BYTES = 300_000;
 
-export function runRoutes({ store }: Deps) {
+export function runRoutes({ store, scorer }: Deps) {
   const app = new Hono<AppEnv>();
   const base = "/orgs/:orgId/projects/:projectId/runs";
 
@@ -117,14 +118,30 @@ export function runRoutes({ store }: Deps) {
     const input = await body(c, z.object({ findings: z.array(findingShape).min(1).max(100) }));
     const now = new Date().toISOString();
     const existing = new Map((await store.listFindings(run.orgId, run.id)).map((f) => [f.id, f]));
-    const records: FindingRecord[] = input.findings.map((f) => {
+    for (const f of input.findings) {
       if (Buffer.byteLength(JSON.stringify(f)) > MAX_FINDING_BYTES) throw badRequest(`Finding ${f.id} is too large to store — trim its diff or evidence body`);
+    }
+    const findings = input.findings as unknown as Finding[];
+    // Advisory, and allowed to fail: a cold classifier must never stop findings being saved.
+    const scores = await scoreFindings(scorer, findings);
+    const records: FindingRecord[] = findings.map((f) => {
       const prior = existing.get(f.id);
       // Re-reporting a finding refreshes its content but keeps the human triage decision.
-      return { id: f.id, orgId: run.orgId, projectId: run.projectId, runId: run.id, triage: prior?.triage ?? "open", assignee: prior?.assignee, finding: f as unknown as Finding, createdAt: prior?.createdAt ?? now, updatedAt: now };
+      return { id: f.id, orgId: run.orgId, projectId: run.projectId, runId: run.id, triage: prior?.triage ?? "open", assignee: prior?.assignee, score: scores.get(f.id) ?? prior?.score, finding: f, createdAt: prior?.createdAt ?? now, updatedAt: now };
     });
     await store.putFindings(records);
-    return c.json({ stored: records.length });
+    return c.json({ stored: records.length, scored: scores.size });
+  });
+
+  /** Score the findings that have none — e.g. the classifier was cold when they were reported. */
+  app.post(`${base}/:runId/findings/score`, async (c) => {
+    const run = await loadRun(c, "member");
+    if (!scorer) throw new HttpError(503, "scorer_disabled", "No classifier endpoint is configured on this server");
+    const unscored = (await store.listFindings(run.orgId, run.id)).filter((r) => !r.score);
+    const scores = await scoreFindings(scorer, unscored.map((r) => r.finding));
+    const updated = unscored.filter((r) => scores.has(r.id)).map((r) => ({ ...r, score: scores.get(r.id) }));
+    if (updated.length) await store.putFindings(updated);
+    return c.json({ scored: updated.length, stillUnscored: unscored.length - updated.length });
   });
 
   app.patch(`${base}/:runId/findings/:findingId`, async (c) => {

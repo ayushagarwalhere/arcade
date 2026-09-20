@@ -74,6 +74,7 @@ export function toFinding(hit: Hit, index: number, scan: Scan): Finding {
     severity: hit.rule.severity,
     status: "reproduced",
     target: targetOf(hit),
+    ruleId: hit.rule.id,
     cwe: hit.rule.cwe,
     summary: hit.rule.summary,
     description: `${hit.rule.description} Found at ${at}.`,

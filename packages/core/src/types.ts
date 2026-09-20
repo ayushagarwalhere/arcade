@@ -171,6 +171,8 @@ export interface Finding {
   severity: Severity;
   status: FindingStatus;
   target: string;
+  /** The scanner rule that produced this finding (or `model-…` for a model-discovered one). */
+  ruleId?: string;
   cwe: string;
   summary: string;
   description: string;
