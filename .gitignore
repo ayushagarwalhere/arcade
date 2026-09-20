@@ -1,4 +1,4 @@
-﻿# dependencies
+# dependencies
 node_modules/
 
 # build output
@@ -22,6 +22,7 @@ npm-debug.log*
 
 # infrastructure
 cdk.out/
+infra/deployment-prod.json
 
 # ml: generated data, checkpoints and Python caches
 ml/data/
