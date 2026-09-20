@@ -37,12 +37,14 @@ apps/
   marketing/   Next.js — the landing site (/, /docs, /changelog, /enterprise)
   ade/         Next.js — the ADE (/arcade), product docs (/arcade/docs) and the Electron desktop shell
   mobile/      Expo — the mobile companion (standalone: not part of the npm workspace)
+  api/         Hono on AWS Lambda — accounts, runs, findings, approvals, the audit trail, and the Bedrock model endpoints
 packages/
   core/        @arcade/core — data model, run engine, scanner, workspace + GitHub file systems
   agents/      @arcade/agents — mapper, attacker, defender, remediator, verifier, provider
   orchestrator/ @arcade/orchestrator — the pipeline and live engine that run the agents
   ui/         @arcade/ui — components, hooks and theme shared by both web apps
   cli/         @arcade/cli — the Arcade CLI + a dependency-free MCP server
+infra/         AWS CDK — DynamoDB, Cognito, the API function and its IAM permissions
 scripts/       repo tooling (build-web.mjs lays both web apps out as one static site)
 ```
 
@@ -62,13 +64,31 @@ npm run dev:marketing  # the marketing site → http://localhost:3000
 - **The ADE:** `http://localhost:3001/arcade/` — press **Run security demo** to watch the
   whole loop, and approve the fix and the merge when prompted.
 
+## Backend
+
+[`apps/api`](apps/api/README.md) keeps the record of a run — organisations, projects, runs,
+findings, approvals and an append-only audit trail in Amazon DynamoDB — and is the only part
+of Arcade that talks to a model (Claude in Amazon Bedrock). Clients never hold a cloud
+credential: `bedrockProvider` in `@arcade/agents` calls this API, which strips secrets from
+the source before any model sees it.
+
+```bash
+npm run dev:api        # http://localhost:3002 — dev sign-in, in-memory store, model off
+npm run test:api       # the API test suite; needs no AWS account or network
+```
+
+It runs with no AWS account at all. To use a real DynamoDB engine locally, or to deploy the
+stack in [`infra/`](infra) (AWS CDK: the table, a Cognito user pool, the API function), see
+the [API README](apps/api/README.md).
+
 ## Connecting GitHub
 
 The **GitHub** entry in the site navbar and the ADE top bar connects a GitHub account. Once
 connected, **Open folder** on the ADE welcome screen (and the top-bar menu) lists your
 repositories, and an opened repository is read straight from the GitHub API — nothing is cloned.
 
-The app is a static export with no backend, so there is no OAuth redirect flow. Two ways in:
+The ADE is a static export and GitHub sign-in does not go through Arcade's API, so there is
+no OAuth redirect flow. Two ways in:
 
 - **Personal access token** — works everywhere. The connect form links to a pre-filled token
   page (`repo` scope). The token is only ever sent to `api.github.com`; the desktop app
@@ -90,8 +110,7 @@ Download button on the site serves the Windows build; macOS and Linux build on t
 platforms.
 
 ```bash
-cd frontend
-npm install
+npm install                 # at the repo root
 npm run desktop:build:win   # Windows: portable .exe + NSIS installer → apps/ade/release/
 npm run desktop:build       # current OS (mac: .dmg, linux: AppImage + .deb)
 npm run desktop:pack        # unpacked app for a quick local check
@@ -113,21 +132,21 @@ This project lives inside a OneDrive-synced folder. OneDrive will dehydrate a
 1. Keep `node_modules` **out of the synced folder** — point it at a local path with a
    directory junction so OneDrive leaves it alone:
    ```powershell
-   New-Item -ItemType Junction -Path frontend\node_modules -Target $env:LOCALAPPDATA\arcade-nm
+   New-Item -ItemType Junction -Path node_modules -Target $env:LOCALAPPDATA\arcade-nm
    ```
 2. Run `npm` from **PowerShell**, not Git Bash, so package install scripts can resolve
    `node` on the Windows PATH.
 
-The same applies to `mobile/` — see its README for the junction command.
+The same applies to `apps/mobile/`, which has its own install — see its README for the junction command.
 
 ## Mobile app
 
-Arcade for iOS and Android lives in [`mobile/`](mobile/README.md): watch a run, read the
+Arcade for iOS and Android lives in [`apps/mobile/`](apps/mobile/README.md): watch a run, read the
 evidence and the fix diff, and answer approval gates from your phone. It shares the data
 model and run engine with the ADE (`npm run sync:core` copies them from `packages/core/src`).
 
 ```bash
-cd mobile
+cd apps/mobile
 npm install
 npm start          # scan the QR code with Expo Go, or press a / i for an emulator
 ```
@@ -188,6 +207,11 @@ network) → **isolate**: disconnect the network and verify it with the Docker d
 
 ## Status
 
-This is a hackathon build. The ADE, agents, evidence trail, approval gates and the demo
-run are functional; the data model is real so demo agents can later be swapped for live
-ones without changing the flow. Desktop installers ship through GitHub Releases.
+Arcade started as a hackathon build and is being turned into a product. What is real today:
+opening a folder or GitHub repository, the static scanner and the fix diffs it produces, the
+approval gates, the Docker sandbox in the CLI, the agent connectors, and the backend in
+`apps/api` (tested locally; not yet deployed). What is still scripted in the ADE: the
+sandboxed attack, test execution, commits and merges, and independent verification — the
+data model is real, so these can be swapped for live implementations without changing the
+flow. The ADE does not yet sign in to the backend or call the model; that wiring is next.
+Desktop installers are intended to ship through GitHub Releases; none is published yet.

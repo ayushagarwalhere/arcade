@@ -6,12 +6,17 @@
   "workspaces": [
     "apps/marketing",
     "apps/ade",
+    "apps/api",
+    "infra",
     "packages/*"
   ],
   "scripts": {
     "dev": "npm run dev:ade",
     "dev:marketing": "npm run dev -w apps/marketing",
     "dev:ade": "npm run dev -w apps/ade",
+    "dev:api": "npm run dev -w apps/api",
+    "test": "npm run test --workspaces --if-present",
+    "test:api": "npm run test -w apps/api",
     "build": "npm run build --workspaces --if-present",
     "build:web": "node scripts/build-web.mjs",
     "lint": "npm run lint --workspaces --if-present",

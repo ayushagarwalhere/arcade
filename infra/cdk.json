@@ -1,0 +1,12 @@
+{
+  "app": "npx tsx bin/arcade.ts",
+  "context": {
+    "stage": "dev",
+    "bedrockModelId": "anthropic.claude-opus-5",
+    "monthlyTokenBudget": 5000000,
+    "corsOrigins": "http://localhost:3000,http://localhost:3001",
+    "authCallbackUrls": "http://localhost:3001/arcade/",
+    "@aws-cdk/core:checkSecretUsage": true,
+    "@aws-cdk/aws-iam:minimizePolicies": true
+  }
+}

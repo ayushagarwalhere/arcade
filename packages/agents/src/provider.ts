@@ -3,15 +3,17 @@
  *
  * Every agent runs on a provider. The built-in `LOCAL_PROVIDER` uses only the
  * rule set and the source already on disk, so the whole loop works offline with
- * no keys. A Bedrock-backed provider implements the same optional methods to
- * deepen the analysis; because the return shapes are identical, none of the
- * agents, beats, or views change when it is swapped in.
+ * no keys. `bedrockProvider` deepens the analysis with Claude on Amazon Bedrock;
+ * because the return shapes are identical, none of the agents, beats, or views
+ * change when it is swapped in.
  *
- * The user is wiring the Bedrock calls in later — this is where they land:
- * implement `explain` / `propose` / `discover` against the model and pass the
- * provider into `runAssessment`.
+ * The provider never talks to AWS itself. It calls the Arcade API (apps/api),
+ * which holds the AWS role, strips secrets from the source, enforces the org's
+ * budget, and returns schema-validated results. No cloud credential ever lives
+ * in the desktop app or the browser.
  */
-import type { Finding } from "@arcade/core/types";
+import type { Finding, Mitigation, Severity, SurfaceNode } from "@arcade/core/types";
+import type { Rule, RuleCategory } from "@arcade/core/rules";
 import type { Hit } from "@arcade/core/scanner";
 
 export interface FixProposal {
@@ -21,10 +23,12 @@ export interface FixProposal {
   rationale: string;
 }
 
+export type ProviderTask = "explain" | "propose" | "discover";
+
 export interface AssessmentProvider {
   id: string;
   name: string;
-  /** True once real model calls are wired; drives copy and the "local" badge. */
+  /** True when real model calls are wired; drives copy and the "local" badge. */
   backed: boolean;
 
   /** Deepen a finding's root cause / narrative. Falsy → keep the rule's text. */
@@ -44,18 +48,171 @@ export const LOCAL_PROVIDER: AssessmentProvider = {
   backed: false,
 };
 
+export interface BedrockProviderConfig {
+  /** Base URL of the Arcade API, e.g. https://api.example.com */
+  apiUrl: string;
+  orgId: string;
+  /** Returns the caller's bearer credential: a session JWT or an `arc_` API token. */
+  getToken: () => string | Promise<string>;
+  /** Shown in the UI; the API decides which model actually runs. */
+  modelName?: string;
+  /**
+   * Agents fall back to the rules when a model call fails, so the run always
+   * completes. This is how the failure still reaches the UI instead of a model
+   * run silently looking like a local one.
+   */
+  onError?: (task: ProviderTask, error: unknown) => void;
+  fetch?: typeof fetch;
+}
+
+/** An API failure, carrying the API's stable error code (e.g. "budget_exceeded"). */
+export class ProviderError extends Error {
+  constructor(
+    public status: number,
+    public code: string,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+/** Stay under the API's per-request source limit with room for the JSON around it. */
+const MAX_SOURCE_BYTES = 150_000;
+const MAX_DISCOVER_FILES = 40;
+const bytes = (s: string) => new TextEncoder().encode(s).length;
+
 /**
- * Placeholder for the Bedrock provider. Fill the method bodies with model calls
- * (e.g. via a route handler that holds the AWS credentials) and set backed:true.
- * Left unimplemented on purpose so the loop runs today without it.
+ * The whole file when it fits; otherwise the largest window of whole lines
+ * around the finding that does. The API refuses oversized source rather than
+ * truncating it, so the choice of what to send is made here, deliberately.
  */
-export function bedrockProvider(config: { region: string; modelId: string }): AssessmentProvider {
+export function sourceWindow(source: string, line: number, maxBytes = MAX_SOURCE_BYTES): { text: string; startLine: number } {
+  if (bytes(source) <= maxBytes) return { text: source, startLine: 1 };
+  const lines = source.split("\n");
+  const at = Math.min(Math.max(line, 1), lines.length) - 1;
+  let lo = at;
+  let hi = at;
+  let size = bytes(lines[at]) + 1;
+  for (;;) {
+    const up = lo > 0 ? bytes(lines[lo - 1]) + 1 : Infinity;
+    const down = hi < lines.length - 1 ? bytes(lines[hi + 1]) + 1 : Infinity;
+    // Grow toward whichever side is closer to the finding, while it still fits.
+    const goUp = up !== Infinity && (down === Infinity || at - lo <= hi - at);
+    const cost = goUp ? up : down;
+    if (cost === Infinity || size + cost > maxBytes) break;
+    size += cost;
+    if (goUp) lo--;
+    else hi++;
+  }
+  return { text: lines.slice(lo, hi + 1).join("\n"), startLine: lo + 1 };
+}
+
+const flaggedLine = (f: Finding) => f.vulnerableCode.lines.find((l) => l.flagged)?.no ?? f.vulnerableCode.lines[0]?.no ?? 1;
+
+const context = (f: Finding) => ({
+  id: f.id,
+  title: f.title,
+  severity: f.severity,
+  cwe: f.cwe,
+  summary: f.summary.slice(0, 2000),
+  description: f.description.slice(0, 4000),
+  path: f.vulnerableCode.path,
+  line: flaggedLine(f),
+});
+
+interface DiscoveredHit {
+  path: string;
+  line: number;
+  title: string;
+  severity: Severity;
+  cwe: string;
+  category: RuleCategory;
+  surface: SurfaceNode["kind"];
+  summary: string;
+  description: string;
+  attackNarrative: string;
+  mitigations: Mitigation[];
+  fix: FixProposal;
+}
+
+const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 48);
+
+/** A model finding becomes a one-off Rule, so every downstream agent treats it like any other hit. */
+function toHit(h: DiscoveredHit, source: string): Hit {
+  const rule: Rule = {
+    id: `model-${slug(h.title)}`,
+    title: h.title,
+    severity: h.severity,
+    cwe: h.cwe,
+    category: h.category,
+    surface: h.surface,
+    summary: h.summary,
+    description: h.description,
+    attackNarrative: h.attackNarrative,
+    mitigations: h.mitigations,
+    fix: () => ({ mode: h.fix.mode, add: h.fix.code, note: h.fix.rationale }),
+  };
+  const excerpt = (source.split("\n")[h.line - 1] ?? "").trim().slice(0, 200);
+  return { rule, path: h.path, match: { line: h.line, column: 0, excerpt } };
+}
+
+export function bedrockProvider(config: BedrockProviderConfig): AssessmentProvider {
+  const doFetch = config.fetch ?? fetch;
+  const base = `${config.apiUrl.replace(/\/+$/, "")}/v1/orgs/${encodeURIComponent(config.orgId)}/model`;
+
+  async function post<T>(task: ProviderTask, payload: unknown): Promise<T> {
+    try {
+      const res = await doFetch(`${base}/${task}`, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${await config.getToken()}` },
+        body: JSON.stringify(payload),
+      });
+      const json = (await res.json().catch(() => null)) as { result?: T; error?: { code: string; message: string } } | null;
+      if (!res.ok || !json?.result) throw new ProviderError(res.status, json?.error?.code ?? "unknown", json?.error?.message ?? `The Arcade API answered ${res.status}`);
+      return json.result;
+    } catch (e) {
+      config.onError?.(task, e);
+      throw e;
+    }
+  }
+
   return {
     id: "bedrock",
-    name: `Amazon Bedrock · ${config.modelId}`,
-    backed: false, // flip to true when the methods below are implemented
-    // async explain(finding, source) { /* call Bedrock; return { rootCause, attackNarrative, description } */ return null; },
-    // async propose(finding, source) { /* call Bedrock; return a FixProposal */ return null; },
-    // async discover(hits, sources) { /* call Bedrock; return extra Hits */ return []; },
+    name: `Amazon Bedrock · ${config.modelName ?? "Claude"}`,
+    backed: true,
+
+    async explain(finding, source) {
+      if (!source) return null;
+      const r = await post<{ description: string; attackNarrative: string; rootCause: string; mitigations: Mitigation[] }>("explain", {
+        finding: context(finding),
+        source: sourceWindow(source, flaggedLine(finding)),
+      });
+      return {
+        description: r.description,
+        attackNarrative: r.attackNarrative,
+        ...(r.mitigations.length ? { mitigations: r.mitigations } : {}),
+        remediation: { ...finding.remediation, rootCause: r.rootCause },
+      };
+    },
+
+    async propose(finding, source) {
+      return post<FixProposal>("propose", { finding: context(finding), source: sourceWindow(source, flaggedLine(finding)) });
+    },
+
+    async discover(hits, sources) {
+      // Send whole files only, smallest first, until the request is full; a file that does not fit is left out, never cut.
+      const files: { path: string; text: string }[] = [];
+      let size = 0;
+      for (const [path, text] of Object.entries(sources).sort((a, b) => a[1].length - b[1].length)) {
+        const cost = bytes(text);
+        if (files.length >= MAX_DISCOVER_FILES || size + cost > MAX_SOURCE_BYTES) break;
+        files.push({ path, text });
+        size += cost;
+      }
+      if (!files.length) return [];
+      const known = hits.slice(0, 400).map((h) => ({ ruleId: h.rule.id, path: h.path, line: h.match.line }));
+      const r = await post<{ hits: DiscoveredHit[] }>("discover", { known, files });
+      return r.hits.filter((h) => sources[h.path] !== undefined).map((h) => toHit(h, sources[h.path]));
+    },
   };
 }

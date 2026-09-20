@@ -1,0 +1,23 @@
+{
+  "name": "@arcade/infra",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Arcade's AWS infrastructure: DynamoDB, Cognito, the API function and its Bedrock permissions.",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "synth": "cdk synth",
+    "diff": "cdk diff",
+    "deploy": "cdk deploy"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.270.0",
+    "constructs": "^10.8.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "aws-cdk": "^2.1142.0",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3"
+  }
+}

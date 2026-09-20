@@ -1,0 +1,16 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": [
+      "es2023"
+    ],
+    "types": [
+      "node"
+    ]
+  },
+  "include": [
+    "bin",
+    "lib"
+  ]
+}

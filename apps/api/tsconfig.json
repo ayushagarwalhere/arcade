@@ -1,0 +1,27 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": [
+      "es2023",
+      "dom",
+      "dom.iterable"
+    ],
+    "types": [
+      "node"
+    ],
+    "paths": {
+      "@arcade/core/*": [
+        "../../packages/core/src/*"
+      ],
+      "@arcade/agents/*": [
+        "../../packages/agents/src/*"
+      ]
+    }
+  },
+  "include": [
+    "src",
+    "test",
+    "scripts"
+  ]
+}

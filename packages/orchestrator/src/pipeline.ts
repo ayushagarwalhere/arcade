@@ -7,14 +7,16 @@
  *   Remediator→ writes the fix diff and a regression test
  *   Verifier  → independently re-checks that the fix closes the weakness
  *
- * It reads only through the WorkspaceFs, runs a provider (local by default,
- * Bedrock later), and returns a RunPlan the store can play. Everything is
- * read-only and side-effect free: no file is written, nothing is executed, and
- * no network call leaves the process.
+ * It reads only through the WorkspaceFs, runs a provider (local by default),
+ * and returns a RunPlan the store can play. Everything is read-only and
+ * side-effect free: no file is written and nothing is executed. With the local
+ * provider no network call leaves the process; the Bedrock provider sends
+ * source to the Arcade API, which redacts secrets before any model sees it.
  */
 import type { WorkspaceFs } from "@arcade/core/fs";
 import type { Finding, Project } from "@arcade/core/types";
 import { scanWorkspace, type Scan, type ScanProgress } from "@arcade/core/scanner";
+import { bySeverity } from "@arcade/core/rules";
 import { mapProject, mapSurface } from "@arcade/agents/mapper";
 import { reproduce } from "@arcade/agents/attacker";
 import { defend } from "@arcade/agents/defender";
@@ -95,6 +97,8 @@ export async function runAssessment(
     try {
       const extra = await provider.discover(scan.hits, scan.sources);
       scan.hits.push(...extra);
+      // The scanner sorted before the model added its hits; findings[0] must still be the most severe.
+      scan.hits.sort((a, b) => bySeverity(a.rule, b.rule));
     } catch {
       /* provider optional; ignore failures */
     }
