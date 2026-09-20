@@ -1,0 +1,13 @@
+{
+  "Arcade-prod": {
+    "ApiUrl": "https://oerxgrc4fehpj3wdef3zght47y0jyjir.lambda-url.us-east-1.on.aws/",
+    "HostedUiDomain": "https://arcade-prod-910685834956.auth.us-east-1.amazoncognito.com",
+    "TableName": "Arcade-prod-TableCD117FA1-1KMYAM0FBTQN5",
+    "UserPoolClientId": "4koe17qosoei9enesq81o4moi4",
+    "UserPoolId": "us-east-1_zIRBkmgwo",
+    "Region": "us-east-1",
+    "Stage": "prod",
+    "WebUrl": "https://d20wyf3rpbds1d.cloudfront.net",
+    "DeployedAt": "2026-09-20T12:37:46Z"
+  }
+}
