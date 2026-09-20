@@ -169,6 +169,15 @@ function handler(event) {
       ],
     });
 
+    // The website this stack serves must be allowed to call the API and to receive Cognito sign-in redirects.
+    // Derived here rather than passed as context, so a deploy can never forget it; context values still add to it.
+    const webUrl = `https://${webDistribution.distributionDomainName}`;
+    api.addEnvironment("CORS_ORIGINS", [...props.corsOrigins, webUrl].join(","));
+    const redirects = [...props.authCallbackUrls, `${webUrl}/arcade/`, `${webUrl}/`];
+    const cfnClient = appClient.node.defaultChild as cognito.CfnUserPoolClient;
+    cfnClient.callbackUrLs = redirects;
+    cfnClient.logoutUrLs = redirects;
+
     new s3deploy.BucketDeployment(this, "WebDeployment", {
       sources: [s3deploy.Source.asset(`${repoRoot}dist/web`)],
       destinationBucket: webBucket,
@@ -182,6 +191,6 @@ function handler(event) {
     new CfnOutput(this, "UserPoolId", { value: userPool.userPoolId });
     new CfnOutput(this, "UserPoolClientId", { value: appClient.userPoolClientId });
     new CfnOutput(this, "HostedUiDomain", { value: domain.baseUrl() });
-    new CfnOutput(this, "WebUrl", { value: `https://${webDistribution.distributionDomainName}` });
+    new CfnOutput(this, "WebUrl", { value: webUrl });
   }
 }

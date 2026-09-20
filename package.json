@@ -29,6 +29,7 @@
     "cli": "node packages/cli/arcade.mjs",
     "mcp": "node packages/cli/mcp-server.mjs",
     "cdk": "npm run cdk -w infra --",
+    "diff:prod": "npm run diff:prod -w infra",
     "deploy:prod": "npm run deploy:prod -w infra",
     "bootstrap:prod": "npm run bootstrap -w infra"
   },

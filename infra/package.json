@@ -11,11 +11,13 @@
     "diff": "node ./cdk.mjs diff",
     "bootstrap": "node ./cdk.mjs bootstrap",
     "deploy": "node ./cdk.mjs deploy",
-    "deploy:prod": "node ./cdk.mjs deploy -c stage=prod"
+    "diff:prod": "node ./cdk.mjs diff -c stage=prod -c fpEndpointName=arcade-fp-classifier-prod",
+    "deploy:prod": "node ./cdk.mjs deploy -c stage=prod -c fpEndpointName=arcade-fp-classifier-prod"
   },
   "dependencies": {
     "aws-cdk-lib": "^2.270.0",
-    "constructs": "^10.8.1"
+    "constructs": "^10.8.1",
+    "dotenv": "^16.6.1"
   },
   "devDependencies": {
     "@types/node": "^20.19.43",
