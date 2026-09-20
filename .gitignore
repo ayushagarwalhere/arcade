@@ -23,3 +23,8 @@ npm-debug.log*
 # infrastructure
 cdk.out/
 infra/deployment-prod.json
+
+# ml: generated data, checkpoints and Python caches
+ml/data/
+ml/runs/
+__pycache__/
