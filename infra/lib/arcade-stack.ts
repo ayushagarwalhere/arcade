@@ -1,11 +1,15 @@
 import { fileURLToPath } from "node:url";
 import { CfnOutput, Duration, RemovalPolicy, Stack, type StackProps } from "aws-cdk-lib";
+import * as cloudfront from "aws-cdk-lib/aws-cloudfront";
+import * as origins from "aws-cdk-lib/aws-cloudfront-origins";
 import * as cognito from "aws-cdk-lib/aws-cognito";
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction, OutputFormat } from "aws-cdk-lib/aws-lambda-nodejs";
 import * as logs from "aws-cdk-lib/aws-logs";
+import * as s3 from "aws-cdk-lib/aws-s3";
+import * as s3deploy from "aws-cdk-lib/aws-s3-deployment";
 import type { Construct } from "constructs";
 
 export interface ArcadeStackProps extends StackProps {
@@ -109,10 +113,67 @@ export class ArcadeStack extends Stack {
     // The app authenticates every /v1 request itself (Cognito JWT or API token), so the URL is public.
     const url = api.addFunctionUrl({ authType: lambda.FunctionUrlAuthType.NONE });
 
+    /* ----------------------------------------------------------------- web */
+
+    const webBucket = new s3.Bucket(this, "WebBucket", {
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      enforceSSL: true,
+      removalPolicy: prod ? RemovalPolicy.RETAIN : RemovalPolicy.DESTROY,
+      autoDeleteObjects: !prod,
+    });
+
+    // Rewrites clean paths (/arcade, /docs) to their index.html so Next.js static routing works
+    const rewriteFunction = new cloudfront.Function(this, "UrlRewrite", {
+      code: cloudfront.FunctionCode.fromInline(`
+function handler(event) {
+  var request = event.request;
+  var uri = request.uri;
+  if (uri.endsWith('/')) {
+    request.uri += 'index.html';
+  } else if (!uri.includes('.')) {
+    request.uri += '/index.html';
+  }
+  return request;
+}
+      `),
+    });
+
+    const webDistribution = new cloudfront.Distribution(this, "WebDistribution", {
+      defaultRootObject: "index.html",
+      defaultBehavior: {
+        origin: origins.S3BucketOrigin.withOriginAccessControl(webBucket),
+        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+        compress: true,
+        functionAssociations: [
+          {
+            function: rewriteFunction,
+            eventType: cloudfront.FunctionEventType.VIEWER_REQUEST,
+          },
+        ],
+      },
+      errorResponses: [
+        {
+          httpStatus: 404,
+          responseHttpStatus: 404,
+          responsePagePath: "/404.html",
+        },
+      ],
+    });
+
+    new s3deploy.BucketDeployment(this, "WebDeployment", {
+      sources: [s3deploy.Source.asset(`${repoRoot}dist/web`)],
+      destinationBucket: webBucket,
+      distribution: webDistribution,
+      distributionPaths: ["/*"],
+      prune: true,
+    });
+
     new CfnOutput(this, "ApiUrl", { value: url.url });
     new CfnOutput(this, "TableName", { value: table.tableName });
     new CfnOutput(this, "UserPoolId", { value: userPool.userPoolId });
     new CfnOutput(this, "UserPoolClientId", { value: appClient.userPoolClientId });
     new CfnOutput(this, "HostedUiDomain", { value: domain.baseUrl() });
+    new CfnOutput(this, "WebUrl", { value: `https://${webDistribution.distributionDomainName}` });
   }
 }

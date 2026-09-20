@@ -27,7 +27,10 @@
     "desktop:build": "npm run desktop:build -w apps/ade",
     "desktop:build:win": "npm run desktop:build:win -w apps/ade",
     "cli": "node packages/cli/arcade.mjs",
-    "mcp": "node packages/cli/mcp-server.mjs"
+    "mcp": "node packages/cli/mcp-server.mjs",
+    "cdk": "npm run cdk -w infra --",
+    "deploy:prod": "npm run deploy:prod -w infra",
+    "bootstrap:prod": "npm run bootstrap -w infra"
   },
   "engines": {
     "node": ">=20"

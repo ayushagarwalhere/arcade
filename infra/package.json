@@ -6,9 +6,12 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "synth": "cdk synth",
-    "diff": "cdk diff",
-    "deploy": "cdk deploy"
+    "cdk": "node ./cdk.mjs",
+    "synth": "node ./cdk.mjs synth",
+    "diff": "node ./cdk.mjs diff",
+    "bootstrap": "node ./cdk.mjs bootstrap",
+    "deploy": "node ./cdk.mjs deploy",
+    "deploy:prod": "node ./cdk.mjs deploy -c stage=prod"
   },
   "dependencies": {
     "aws-cdk-lib": "^2.270.0",

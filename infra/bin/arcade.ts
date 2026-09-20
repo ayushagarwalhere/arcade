@@ -5,6 +5,7 @@
  * corsOrigins, authCallbackUrls. The account and region come from the AWS
  * credentials in use, so the same code deploys anywhere.
  */
+import "dotenv/config";
 import { App } from "aws-cdk-lib";
 import { ArcadeStack } from "../lib/arcade-stack";
 
