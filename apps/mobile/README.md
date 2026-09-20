@@ -23,7 +23,7 @@ the phone is the run you see on the desktop — same beats, same gates, same evi
 ## Run it
 
 ```bash
-cd mobile
+cd apps/mobile
 npm install
 npm start          # scan the QR code with Expo Go, or press a / i for an emulator
 ```
@@ -35,7 +35,7 @@ npm start          # scan the QR code with Expo Go, or press a / i for an emulat
 
 ### Windows + OneDrive
 
-As with `frontend/`, keep `node_modules` out of the synced folder and run `npm` from
+As at the repo root, keep `node_modules` out of the synced folder and run `npm` from
 **PowerShell**, not Git Bash. Create the junction before installing:
 
 ```powershell
@@ -68,7 +68,7 @@ Two ways in, the same as the rest of Arcade:
   in the device keychain (`expo-secure-store`).
 - **Sign in with GitHub (device flow)** — a native app has no CORS restrictions, so it can
   run the device flow itself. Use the same OAuth app as the desktop build and put its
-  client ID in `mobile/.env.local`:
+  client ID in `apps/mobile/.env.local`:
 
   ```bash
   EXPO_PUBLIC_GITHUB_CLIENT_ID=Ov23li...

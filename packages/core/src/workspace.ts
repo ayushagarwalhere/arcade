@@ -23,6 +23,15 @@ interface DesktopBridge {
   createFolder?: () => Promise<{ name: string; path: string } | null>;
   github?: GithubBridge;
   agents?: AgentsBridge;
+  sandbox?: SandboxBridge;
+}
+
+/** Real Docker sandboxes — desktop only, because Docker runs on the user's machine (electron/sandbox-ipc.js). */
+export interface SandboxBridge {
+  available: () => Promise<{ available: boolean; reason?: string }>;
+  /** Runs the project's own test command in a throwaway, network-isolated container. */
+  test: (root: string) => Promise<{ ok: true; passed: boolean; exitCode: number; timedOut: boolean; durationMs: number; sandboxId: string; image: string; network: string } | { ok: false; error: string }>;
+  onEvent: (handler: (e: { kind: "step"; step: string; detail: string } | { kind: "output"; line: string }) => void) => () => void;
 }
 
 interface DirectoryHandle {

@@ -126,4 +126,7 @@ function registerWorkspaceIpc() {
   });
 }
 
-module.exports = { registerWorkspaceIpc };
+/** For other bridges: is this exactly a folder the user opened through the native picker? */
+const isAllowedRoot = (root) => typeof root === "string" && allowedRoots().has(root);
+
+module.exports = { registerWorkspaceIpc, isAllowedRoot };

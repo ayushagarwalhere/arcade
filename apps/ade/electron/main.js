@@ -8,7 +8,8 @@
 const { app, BrowserWindow, protocol, shell, Menu } = require("electron");
 const path = require("path");
 const fs = require("fs");
-const { registerWorkspaceIpc } = require("./workspace-ipc");
+const { registerWorkspaceIpc, isAllowedRoot } = require("./workspace-ipc");
+const { registerSandboxIpc } = require("./sandbox-ipc");
 const { registerGithubIpc } = require("./github-ipc");
 const { registerAgentsIpc } = require("./agents-ipc");
 
@@ -107,6 +108,7 @@ app.whenReady().then(() => {
   registerWorkspaceIpc();
   registerGithubIpc();
   registerAgentsIpc();
+  registerSandboxIpc({ isAllowedRoot });
 
   if (!isDev) {
     protocol.handle(SCHEME, async (request) => {

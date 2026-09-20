@@ -26,4 +26,14 @@ contextBridge.exposeInMainWorld("arcade", {
     connect: (id) => ipcRenderer.invoke("agents:connect", id),
     disconnect: (id) => ipcRenderer.invoke("agents:disconnect", id),
   },
+  // Real Docker sandboxes (see sandbox-ipc.js). The page names an opened folder; it never supplies a command.
+  sandbox: {
+    available: () => ipcRenderer.invoke("sandbox:available"),
+    test: (root) => ipcRenderer.invoke("sandbox:test", root),
+    onEvent: (handler) => {
+      const listener = (_e, payload) => handler(payload);
+      ipcRenderer.on("sandbox:event", listener);
+      return () => ipcRenderer.removeListener("sandbox:event", listener);
+    },
+  },
 });

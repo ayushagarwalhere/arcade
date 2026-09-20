@@ -10,7 +10,7 @@
  * backend; only the source of the beats would change.
  */
 import { useCallback, useEffect, useReducer, useRef } from "react";
-import type { ArcadeState } from "./types";
+import type { ArcadeState, TerminalLine } from "./types";
 import { applyBeat, buildBeats, freshState, type Beat, type RunPlan } from "./engine";
 
 interface RunState {
@@ -170,6 +170,9 @@ export function useArcadeRun() {
     [],
   );
 
+  /** Write a real line into the terminal — output from something that actually ran, not a scripted beat. */
+  const appendTerminal = useCallback((line: TerminalLine) => dispatch({ type: "APPLY", beat: { t: "term", line, delay: 0 } }), []);
+
   const pendingApproval = state.s.approvals.find((a) => a.status === "pending");
   const progress = Math.min(1, state.cursor / Math.max(1, beats.length));
   const done = state.cursor >= beats.length;
@@ -192,6 +195,7 @@ export function useArcadeRun() {
     requestDestructive,
     setProvider,
     dismissApproval,
+    appendTerminal,
   };
 }
 

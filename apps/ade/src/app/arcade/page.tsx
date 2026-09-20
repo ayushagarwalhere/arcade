@@ -171,6 +171,33 @@ export default function ArcadePage() {
     void saveToCloud(a);
   };
 
+  // Desktop only: run the project's own tests in a real, network-isolated Docker sandbox and print
+  // what actually happened. The website has no Docker to drive, so there this reports why and stops.
+  const [sandboxBusy, setSandboxBusy] = useState(false);
+  const runSandboxTests = async () => {
+    const bridge = typeof window !== "undefined" ? window.arcade?.sandbox : undefined;
+    const say = (kind: "cmd" | "info" | "sub" | "ok" | "err" | "warn", text: string) => run.appendTerminal({ agent: "system", kind, text });
+    show("panel", true);
+    setPanelTab("terminal");
+    if (!bridge || !folder) {
+      say("warn", "Real sandboxes need Docker on your machine — open this project in the Arcade desktop app, or run: arcade sandbox test .");
+      return;
+    }
+    if (sandboxBusy) return;
+    setSandboxBusy(true);
+    say("cmd", `arcade sandbox test ${folder.path}`);
+    const off = bridge.onEvent((e) => (e.kind === "step" ? say("info", `${e.step} · ${e.detail}`) : say("sub", e.line)));
+    try {
+      const r = await bridge.test(folder.path);
+      if (!r.ok) say("err", r.error);
+      else if (r.timedOut) say("err", `Timed out · sandbox ${r.sandboxId} destroyed`);
+      else say(r.passed ? "ok" : "err", `${r.passed ? "Tests passed" : `Tests failed (exit ${r.exitCode})`} · ${(r.durationMs / 1000).toFixed(1)}s · network: ${r.network} · sandbox ${r.sandboxId} destroyed`);
+    } finally {
+      off();
+      setSandboxBusy(false);
+    }
+  };
+
   // Signed in → the scan is recorded in the user's Arcade account (DynamoDB, via the API), where the
   // false-positive classifier scores each finding. Signed out → the scan stays local, exactly as before.
   const [sync, setSync] = useState<SyncState>({ kind: "idle" });
@@ -261,6 +288,7 @@ export default function ArcadePage() {
     ...findings.map((f) => ({ id: `finding:${f.id}`, group: "Finding", label: f.id, hint: f.title, Icon: ShieldAlert, run: () => openFinding(f.id) })),
     { id: "run:start", group: "Run", label: folder && !run.live ? "Assess workspace" : state.phase === "idle" ? "Run security loop" : "Resume run", Icon: Play, run: startOrLaunch },
     { id: "run:reset", group: "Run", label: "Reset run", Icon: RotateCcw, run: reset },
+    { id: "run:sandbox-tests", group: "Run", label: "Run tests in a real sandbox (desktop · Docker)", Icon: ShieldAlert, run: () => void runSandboxTests() },
     { id: "workspace:close", group: "Workspace", label: "Close workspace", hint: "Back to welcome", Icon: FolderClosed, run: closeWorkspace },
     { id: "layout:sidebar", group: "Layout", label: "Toggle sidebar", hint: "Ctrl+B", Icon: PanelLeft, run: () => toggle("sidebar") },
     { id: "layout:panel", group: "Layout", label: "Toggle panel", hint: "Ctrl+J", Icon: PanelBottom, run: () => toggle("panel") },

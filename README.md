@@ -13,6 +13,36 @@ Arcade doesn't just say "this might be vulnerable." It shows the attack surface,
 exploit, the request/response that proves it, the fix diff, and whether the original
 attack still succeeds. Evidence, not guesses.
 
+## Live
+
+| | Link |
+|---|---|
+| **Website** | <https://d20wyf3rpbds1d.cloudfront.net> |
+| **The ADE (workbench)** | <https://d20wyf3rpbds1d.cloudfront.net/arcade/> |
+| **Product documentation** | <https://d20wyf3rpbds1d.cloudfront.net/arcade/docs/> |
+| Guides · changelog · enterprise | [/docs/](https://d20wyf3rpbds1d.cloudfront.net/docs/) · [/changelog/](https://d20wyf3rpbds1d.cloudfront.net/changelog/) · [/enterprise/](https://d20wyf3rpbds1d.cloudfront.net/enterprise/) |
+| **API status** | <https://oerxgrc4fehpj3wdef3zght47y0jyjir.lambda-url.us-east-1.on.aws/health> |
+| **Source** | <https://github.com/ayushagarwalhere/arcade> |
+
+These are safe to share: a static site, a health check, and an API that authenticates every other request. Everything
+else stays private — the deploy keys in `.env`, and the SageMaker endpoint, which answers only to the API's IAM role.
+Desktop installers are not published yet.
+
+## Documentation
+
+| Read this | For |
+|---|---|
+| [README.md](README.md) (this file) | What Arcade is, the architecture, running it, deploying it, status |
+| [apps/ade/README.md](apps/ade/README.md) | The workbench and desktop app: what runs where, sign-in, saving scans, the desktop bridges |
+| [apps/api/README.md](apps/api/README.md) | The backend: every route, the DynamoDB key design, the rules the code enforces, running it locally |
+| [ml/README.md](ml/README.md) | The false-positive classifier: data, continual training, results, SageMaker hosting |
+| [infra/README.md](infra/README.md) | The two CDK stacks, deploy and teardown commands, known gaps |
+| [packages/cli/README.md](packages/cli/README.md) | The CLI, the Docker sandbox, the MCP server — and which commands are real |
+| [apps/mobile/README.md](apps/mobile/README.md) | The Expo companion app |
+| [SECURITY.md](SECURITY.md) | Reporting a vulnerability, what the design guarantees, known limitations |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Setup, where code goes, what to run before a pull request |
+| [Product docs](https://d20wyf3rpbds1d.cloudfront.net/arcade/docs/) (source: `apps/ade/src/lib/docs/content/`) | User-facing guides. Some pages describe the intended product ahead of the code — the Status section below is the source of truth |
+
 ## The security loop
 
 ```
@@ -360,11 +390,21 @@ and the false-positive classifier on a SageMaker serverless endpoint. URLs and i
 gates; the Docker sandbox in the CLI; the agent connectors; the backend (accounts, orgs, runs, findings, approvals,
 audit trail, Bedrock endpoints, finding scoring); the ML pipeline, which has trained and promoted a model.
 
-**Not connected yet — the next piece of work:** the website and ADE do not sign in to the backend or send it their
-findings, so nothing a visitor does reaches DynamoDB, Bedrock or the classifier. The `NEXT_PUBLIC_*` values are in
-place for it; the sign-in flow and the calls are not written.
+**Written, waiting on the next deploy:** sign-in (Cognito, PKCE) and saving each real scan to the backend — run,
+findings, classifier scores, audit entry. It reaches the live site once `Arcade-prod` is redeployed, because the
+currently deployed stack allows only `localhost` in CORS and in Cognito's redirect URLs. Tested against the API's real
+routes; not yet exercised in a browser against the live user pool.
 
-**Still scripted in the ADE:** the sandboxed attack, test execution, commits and merges, and independent
+**Blocked outside the code:** the AWS account has not been granted access to any Claude model on Bedrock (every model
+answers "not available for this account"), so the explain / propose / discover endpoints fail until access is
+requested under *Amazon Bedrock → Model access*. The ADE also does not pass the Bedrock provider into an assessment yet.
+
+**Real sandbox: desktop and CLI only.** The Docker sandbox is verified working (secrets withheld, host filesystem
+invisible, network cut and checked). The desktop app can run a project's tests in it; the bridge is written and
+compiles but has not yet been exercised inside a packaged app. The website cannot have one — there is no Docker on a
+visitor's machine to drive — so a hosted sandbox would be a new cloud service.
+
+**Still scripted in the ADE:** the attack, the test lines shown during a run, commits and merges, and independent
 verification. The data model is real, so these can be swapped for live implementations without changing the flow.
 
 **Not done:** training on SageMaker (`ml/sagemaker_round.py` is written, never run; needs GPU quota), automatic
