@@ -1,4 +1,5 @@
 "use client";
+import type { ReactNode } from "react";
 import { Loader2, Lock, PanelBottom, PanelLeft, PanelRight, Play, RotateCcw, Search, ShieldCheck } from "lucide-react";
 import type { ArcadeState, Approval } from "@arcade/core/types";
 import type { GithubRepo } from "@arcade/core/github";
@@ -25,7 +26,10 @@ export default function TopBar({
   onReset,
   onShowApproval,
   onOpenRepo,
+  cloud,
 }: {
+  /** The Arcade account control (sign-in / save status). */
+  cloud?: ReactNode;
   onOpenRepo: (r: GithubRepo) => void;
   onHome: () => void;
   state: ArcadeState;
@@ -71,6 +75,7 @@ export default function TopBar({
       </button>
 
       <div className="flex items-center justify-end gap-1">
+        {cloud}
         <GithubConnect variant="ade" onOpenRepo={onOpenRepo} />
         {pendingApproval ? (
           <button

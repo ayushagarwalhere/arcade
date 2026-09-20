@@ -68,6 +68,26 @@ describe("roles", () => {
   });
 });
 
+describe("abuse limits", () => {
+  it("caps how many organisations one account can own, since each carries its own model budget", async () => {
+    const { call } = harness();
+    for (let i = 0; i < 3; i++) expect((await call("eve", "POST", "/orgs", { name: `org ${i}` })).status).toBe(201);
+    const fourth = await call("eve", "POST", "/orgs", { name: "one too many" });
+    expect(fourth.status).toBe(403);
+    expect(fourth.body.error.code).toBe("org_limit");
+    // Being a member of other people's orgs does not count against the cap.
+    expect((await call("ada", "POST", "/orgs", { name: "ada's" })).status).toBe(201);
+  });
+
+  it("sends security headers on every response", async () => {
+    const { app } = harness();
+    const res = await app.request("/health");
+    expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(res.headers.get("x-frame-options")).toBeTruthy();
+    expect(res.headers.get("strict-transport-security")).toContain("max-age");
+  });
+});
+
 describe("API tokens", () => {
   it("authenticates with a minted token, scoped to its org, and never returns the secret again", async () => {
     const { call, seed } = harness();

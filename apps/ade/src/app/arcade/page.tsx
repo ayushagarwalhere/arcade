@@ -33,6 +33,9 @@ import Findings from "@/components/views/Findings";
 import Evidence from "@/components/views/Evidence";
 import Timeline from "@/components/views/Timeline";
 import Browser from "@/components/views/Browser";
+import CloudSync, { type SyncState } from "@/components/CloudSync";
+import { apiUrl, cloudConfigured, completeSignIn, getToken } from "@/lib/cloud-auth";
+import { saveAssessment } from "@arcade/core/cloud-sync";
 
 const REMEDIATED = ["remediating", "testing", "verifying", "verified"];
 
@@ -165,6 +168,31 @@ export default function ArcadePage() {
     setSelectedFinding(a.findings[0]?.id ?? "ARC-000");
     setShowLaunch(false);
     openView("overview");
+    void saveToCloud(a);
+  };
+
+  // Signed in → the scan is recorded in the user's Arcade account (DynamoDB, via the API), where the
+  // false-positive classifier scores each finding. Signed out → the scan stays local, exactly as before.
+  const [sync, setSync] = useState<SyncState>({ kind: "idle" });
+  useEffect(() => {
+    if (cloudConfigured) void completeSignIn().catch(() => {});
+  }, []);
+  const saveToCloud = async (a: Assessment) => {
+    if (!cloudConfigured || !folder) return;
+    // A clean scan carries one placeholder finding; it is not a finding and must not be stored as one.
+    const findings = a.findings.filter((f) => f.id !== "ARC-000");
+    try {
+      await getToken();
+    } catch {
+      return; // not signed in
+    }
+    setSync({ kind: "saving" });
+    try {
+      const saved = await saveAssessment({ apiUrl, getToken }, { projectName: folder.name, repo: a.project.repo, profile: a.findings[0]?.remediation.files.length ? "full" : "scan-only", filesScanned: a.scan.filesScanned, findings });
+      setSync({ kind: "saved", findings: saved.stored, scored: saved.scored });
+    } catch (e) {
+      setSync({ kind: "error", message: e instanceof Error ? e.message : "Could not reach the Arcade API" });
+    }
   };
   // For a real folder that hasn't been assessed yet, "run" reopens the launcher;
   // otherwise it resumes the loaded run.
@@ -264,6 +292,7 @@ export default function ArcadePage() {
         onReset={reset}
         onShowApproval={() => show("agent", true)}
         onOpenRepo={(r) => enter(repoWorkspace(r))}
+        cloud={<CloudSync sync={sync} />}
       />
 
       <div className="relative flex min-h-0 flex-1">

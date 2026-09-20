@@ -3,12 +3,13 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { mintToken, requireOrgRole, type AppEnv } from "../auth/auth";
 import { ROLE_RANK, type Role } from "../db/store";
-import { badRequest, conflict, forbidden, notFound } from "../errors";
+import { badRequest, conflict, forbidden, HttpError, notFound } from "../errors";
 import { body, type Deps } from "../http";
 import { monthOf, newId } from "../ids";
 
 const role = z.enum(["viewer", "member", "admin", "owner"]);
 const name = z.string().trim().min(1).max(120);
+const MAX_OWNED_ORGS = 3;
 
 export function orgRoutes({ store, config }: Deps) {
   const app = new Hono<AppEnv>();
@@ -26,6 +27,10 @@ export function orgRoutes({ store, config }: Deps) {
     // A token is bound to one org; creating another is something a signed-in person does.
     if (p.token) throw forbidden("API tokens cannot create organisations");
     const input = await body(c, z.object({ name }));
+    // Each org carries its own monthly model budget, and sign-up is open — so without a cap one
+    // account could mint organisations to multiply its spend without limit.
+    const owned = (await store.listOrgsForUser(p.userId)).filter((m) => m.role === "owner").length;
+    if (owned >= MAX_OWNED_ORGS) throw new HttpError(403, "org_limit", `An account can own at most ${MAX_OWNED_ORGS} organisations`);
     const now = new Date().toISOString();
     const org = { id: newId("org"), name: input.name, createdBy: p.userId, createdAt: now };
     await store.createOrg(org, { orgId: org.id, userId: p.userId, role: "owner", createdAt: now });

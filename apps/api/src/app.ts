@@ -5,6 +5,7 @@
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
+import { secureHeaders } from "hono/secure-headers";
 import { ZodError } from "zod";
 import { authenticate, cognitoVerifier, type AppEnv, type JwtVerifier } from "./auth/auth";
 import { dynamoStore } from "./db/dynamo";
@@ -22,6 +23,8 @@ export function createApp(deps: Deps & { verifyJwt?: JwtVerifier }) {
   const { config, store } = deps;
   const app = new Hono<AppEnv>();
 
+  // nosniff, frame denial, HSTS and a no-referrer policy on every response.
+  app.use("*", secureHeaders());
   app.use("*", cors({ origin: config.corsOrigins, allowHeaders: ["authorization", "content-type"], allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE"], maxAge: 600 }));
   // Findings batches and discover payloads are the largest bodies; both fit well inside this.
   app.use("*", bodyLimit({ maxSize: 4 * 1024 * 1024, onError: (c) => c.json({ error: { code: "body_too_large", message: "Request body is too large" } }, 413) }));

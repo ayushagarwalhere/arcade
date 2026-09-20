@@ -46,6 +46,10 @@ function resolveFile(pathname) {
   const rel = decodeURIComponent(pathname).replace(/^\/+/, "");
   if (!rel) return path.join(OUT, "index.html");
   const fp = path.join(OUT, rel);
+  // An encoded "../" survives URL normalisation and is decoded above, so check the result:
+  // app:// may only ever serve files inside the exported site.
+  const inside = path.relative(OUT, fp);
+  if (inside.startsWith("..") || path.isAbsolute(inside)) return path.join(OUT, "404.html");
   try {
     const stat = fs.statSync(fp);
     if (stat.isDirectory()) return path.join(fp, "index.html");

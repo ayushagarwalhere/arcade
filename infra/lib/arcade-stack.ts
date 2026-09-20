@@ -152,6 +152,8 @@ function handler(event) {
       defaultBehavior: {
         origin: origins.S3BucketOrigin.withOriginAccessControl(webBucket),
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+        // HSTS, nosniff, frame-options, referrer-policy: the site shipped with none of them.
+        responseHeadersPolicy: cloudfront.ResponseHeadersPolicy.SECURITY_HEADERS,
         compress: true,
         functionAssociations: [
           {
@@ -163,6 +165,12 @@ function handler(event) {
       errorResponses: [
         {
           httpStatus: 404,
+          responseHttpStatus: 404,
+          responsePagePath: "/404.html",
+        },
+        // A private bucket answers 403, not 404, for a key that does not exist — serve the same not-found page.
+        {
+          httpStatus: 403,
           responseHttpStatus: 404,
           responsePagePath: "/404.html",
         },
