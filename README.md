@@ -314,6 +314,10 @@ Windows, macOS (arm64 + x64) and Linux installers and attaches them to a GitHub 
 git tag v0.2.0 && git push origin v0.2.0
 ```
 
+After running `npm install` on one machine, run `npm run lock:complete` before committing the lockfile. npm
+records only the current OS's native packages (the SWC compiler, Tailwind's engine), and a lockfile like that
+builds on your machine and nowhere else; the release workflow checks for it first and says so.
+
 The site's Download buttons point at `releases/latest/download/<asset>`, and the asset names carry no version,
 so publishing a release is all it takes for them to serve the new build. The builds are unsigned: Windows
 SmartScreen and macOS Gatekeeper warn on first launch until code-signing certificates are added.

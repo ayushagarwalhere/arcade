@@ -1,10 +1,14 @@
 {
   "name": "@arcade/ade",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "productName": "Arcade",
-  "description": "Arcade â€” a security ADE for AI-generated software",
-  "author": "Arcade",
+  "description": "Arcade — a security ADE for AI-generated software",
+  "homepage": "https://github.com/ayushagarwalhere/arcade",
+  "author": {
+    "name": "Arcade",
+    "email": "ayushagarwalhere@users.noreply.github.com"
+  },
   "main": "electron/main.js",
   "scripts": {
     "monaco": "node scripts/copy-monaco.mjs",
@@ -112,6 +116,7 @@
       "artifactName": "Arcade-${arch}.${ext}"
     },
     "linux": {
+      "executableName": "arcade",
       "target": [
         "AppImage",
         "deb"
