@@ -172,6 +172,8 @@ export interface Finding {
   severity: Severity;
   status: FindingStatus;
   target: string;
+  /** The scanner rule that produced this finding (or `model-…` for a model-discovered one). */
+  ruleId?: string;
   cwe: string;
   summary: string;
   description: string;
@@ -196,6 +198,10 @@ export interface Approval {
   reason: string;
   target: string;
   status: ApprovalStatus;
+  /** What was actually established before asking (tests that ran, the re-check result). Shown with the request. */
+  evidence?: string;
+  /** Names the action the approve button takes, e.g. "Push & open pull request". */
+  approveLabel?: string;
 }
 
 export interface TargetEnvironment {

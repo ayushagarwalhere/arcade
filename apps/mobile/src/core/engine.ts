@@ -7,7 +7,7 @@
  * beat construction and the pure `applyBeat` reducer so they can be unit-tested
  * independently of React.
  */
-import type { Agent, AgentKind, ArcadeState, Finding, RunPhase, TerminalLine, TimelineEvent, Verification } from "./types";
+import type { Agent, AgentKind, ApprovalKind, ArcadeState, Finding, RunPhase, TerminalLine, TimelineEvent, Verification } from "./types";
 import {
   ENVIRONMENT,
   FLAGSHIP,
@@ -28,7 +28,23 @@ export type Beat =
   | { delay: number; t: "reveal"; n: number }
   | { delay: number; t: "finding"; patch: Partial<Finding> }
   | { delay: number; t: "verify"; patch: Partial<Verification> }
-  | { delay: number; t: "gate"; approvalId: string };
+  | { delay: number; t: "gate"; approvalId: string; def?: GateDef };
+
+/** Inline approval definition carried by a live run's gate beat. */
+export interface GateDef {
+  kind: ApprovalKind;
+  title: string;
+  reason: string;
+  target: string;
+  evidence?: string;
+  approveLabel?: string;
+}
+
+/** A ready-to-play run: the ordered beats and the state they start from. */
+export interface RunPlan {
+  beats: Beat[];
+  initial: ArcadeState;
+}
 
 export const TERM = 340; // ms between streamed terminal lines
 export const STEP = 160; // ms for small state updates
@@ -54,7 +70,7 @@ export function freshState(): ArcadeState {
   };
 }
 
-export const APPROVAL_DEFS: Record<string, { kind: "code" | "ship"; title: string; reason: string; target: string }> = {
+export const APPROVAL_DEFS: Record<string, GateDef> = {
   "approve-fix": {
     kind: "code",
     title: "Apply the proposed fix",
@@ -66,6 +82,8 @@ export const APPROVAL_DEFS: Record<string, { kind: "code" | "ship"; title: strin
     title: "Merge the verified fix to main",
     reason: "ARC-001 is verified fixed (200 OK → 403 Forbidden). Merging closes the finding.",
     target: "fix/admin-export-authz → main",
+    evidence: "ARC-001 verified fixed · original exploit returns 403 · 156/156 tests pass",
+    approveLabel: "Approve & merge",
   },
 };
 
@@ -180,7 +198,8 @@ export function applyBeat(s: ArcadeState, beat: Beat): ArcadeState {
     case "verify":
       return { ...s, finding: { ...s.finding, verification: { ...s.finding.verification, ...beat.patch } } };
     case "gate": {
-      const def = APPROVAL_DEFS[beat.approvalId];
+      // A live run carries its own def; the demo falls back to the static table.
+      const def = beat.def ?? APPROVAL_DEFS[beat.approvalId];
       if (s.approvals.some((a) => a.id === beat.approvalId)) return s;
       return { ...s, approvals: [...s.approvals, { id: beat.approvalId, status: "pending", ...def }] };
     }

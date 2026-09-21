@@ -42,13 +42,73 @@ export const NEW_TOKEN_URL = `https://github.com/settings/tokens/new?scopes=${SC
 
 /* ---------------------------------------------------------------------- api */
 
-export async function githubFetch(token: string, path: string, accept = "application/vnd.github+json") {
+/** GitHub is refusing requests for now: the hourly quota is spent, or a secondary limit asked us to back off. */
+export class GithubRateLimitError extends Error {
+  constructor(
+    /** When requests are accepted again, if GitHub said. */
+    readonly resetAt: Date | null,
+  ) {
+    super(
+      resetAt
+        ? `GitHub's API rate limit is used up. It resets at ${resetAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.`
+        : "GitHub asked Arcade to slow down. Wait a minute and try again.",
+    );
+  }
+}
+
+/** Any other refusal, with GitHub's own explanation when it sent one. */
+export class GithubApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
+}
+
+/** A 403/429 is a rate limit when the quota header says zero or GitHub names a retry delay. */
+function rateLimitOf(res: Response): GithubRateLimitError | null {
+  if (res.status !== 403 && res.status !== 429) return null;
+  const retryAfter = Number(res.headers.get("retry-after"));
+  if (retryAfter > 0) return new GithubRateLimitError(new Date(Date.now() + retryAfter * 1000));
+  if (res.headers.get("x-ratelimit-remaining") === "0") {
+    const reset = Number(res.headers.get("x-ratelimit-reset"));
+    return new GithubRateLimitError(reset > 0 ? new Date(reset * 1000) : null);
+  }
+  return res.status === 429 ? new GithubRateLimitError(null) : null;
+}
+
+export async function githubFetch(token: string, path: string, accept = "application/vnd.github+json", init?: { method?: string; body?: unknown }) {
   const res = await fetch(`https://api.github.com${path}`, {
-    headers: { Accept: accept, Authorization: `Bearer ${token}`, "X-GitHub-Api-Version": "2022-11-28" },
+    method: init?.method ?? "GET",
+    headers: {
+      Accept: accept,
+      Authorization: `Bearer ${token}`,
+      "X-GitHub-Api-Version": "2022-11-28",
+      ...(init?.body !== undefined ? { "Content-Type": "application/json" } : {}),
+    },
+    body: init?.body !== undefined ? JSON.stringify(init.body) : undefined,
   });
   if (res.status === 401) throw new GithubAuthError();
-  if (!res.ok) throw new Error(`GitHub responded ${res.status}`);
+  const limited = rateLimitOf(res);
+  if (limited) throw limited;
+  if (!res.ok) {
+    let detail = "";
+    try {
+      detail = String(((await res.json()) as { message?: string }).message ?? "");
+    } catch {
+      /* no body */
+    }
+    throw new GithubApiError(detail ? `GitHub responded ${res.status} — ${detail}` : `GitHub responded ${res.status}`, res.status);
+  }
   return res;
+}
+
+/** What is left of this hour's core API quota. Asking does not count against it. */
+export async function githubRateLimit(token: string): Promise<{ remaining: number; limit: number; resetAt: Date }> {
+  const body = (await (await githubFetch(token, "/rate_limit")).json()) as { resources: { core: { remaining: number; limit: number; reset: number } } };
+  const core = body.resources.core;
+  return { remaining: core.remaining, limit: core.limit, resetAt: new Date(core.reset * 1000) };
 }
 
 const api = async <T,>(token: string, path: string): Promise<T> => (await githubFetch(token, path)).json();

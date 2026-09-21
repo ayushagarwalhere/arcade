@@ -1,13 +1,17 @@
 import { Tabs } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Activity, Bug, LayoutDashboard, Settings, Waypoints } from "lucide-react-native";
-import { useRun } from "@/run/RunProvider";
+import { useAssess } from "@/assess/AssessmentProvider";
+import { isOpen } from "@/assess/status";
+import { useStatusContext } from "@/assess/useStatus";
 import { C, F } from "@/ui/theme";
 
 export default function TabLayout() {
-  const { state } = useRun();
+  const { findings } = useAssess();
+  const ctx = useStatusContext();
   const insets = useSafeAreaInsets();
-  const open = [state.finding, ...state.secondaryFindings].filter((f) => f.verification.outcome !== "verified").length;
+  // Findings of whatever is loaded that still need attention; no badge when nothing is loaded.
+  const open = findings.filter((f) => isOpen(f, ctx)).length;
 
   return (
     <Tabs
@@ -29,7 +33,7 @@ export default function TabLayout() {
         options={{
           title: "Findings",
           tabBarIcon: ({ color }) => <Bug size={21} color={color} />,
-          tabBarBadge: open,
+          tabBarBadge: open || undefined,
           tabBarBadgeStyle: { backgroundColor: C.red500, color: C.white, fontFamily: F.semibold, fontSize: 10 },
         }}
       />

@@ -1,22 +1,39 @@
 import { Pressable, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 import { ChevronRight } from "lucide-react-native";
-import type { Finding, Severity } from "@/core/types";
-import { useRun } from "@/run/RunProvider";
+import { useAssess } from "@/assess/AssessmentProvider";
+import { describeRun } from "@/assess/assess";
+import { statusOf } from "@/assess/status";
+import { useStatusContext } from "@/assess/useStatus";
+import type { Severity } from "@/core/types";
 import Screen from "@/ui/Screen";
-import { Mono, SEVERITY, SeverityBadge, StatusBadge, T } from "@/ui/atoms";
+import { Badge, Empty, Mono, SEVERITY, SeverityBadge, T } from "@/ui/atoms";
 import { C, F, alpha } from "@/ui/theme";
 
 const ORDER: Severity[] = ["critical", "high", "medium", "low"];
 
 export default function Findings() {
-  const { state } = useRun();
+  const { mode, assessment, findings: all } = useAssess();
+  const ctx = useStatusContext();
   const router = useRouter();
-  const findings: Finding[] = [state.finding, ...state.secondaryFindings].sort((a, b) => ORDER.indexOf(a.severity) - ORDER.indexOf(b.severity));
+  const findings = [...all].sort((a, b) => ORDER.indexOf(a.severity) - ORDER.indexOf(b.severity));
   const counts = ORDER.map((sev) => [sev, findings.filter((f) => f.severity === sev).length] as const).filter(([, n]) => n > 0);
+
+  if (mode === "none") {
+    return (
+      <Screen>
+        <Empty text="No findings, because nothing has been assessed yet. Pick a repository from Overview and Arcade will analyse it here." />
+      </Screen>
+    );
+  }
 
   return (
     <Screen contentContainerStyle={{ gap: 12 }}>
+      {assessment && (
+        <T style={s.what}>
+          {describeRun(assessment.meta)} · {assessment.meta.filesAnalysed} files · nothing executed
+        </T>
+      )}
       <View style={s.summary}>
         {counts.map(([sev, n]) => (
           <View key={sev} style={s.count}>
@@ -28,37 +45,44 @@ export default function Findings() {
         ))}
       </View>
 
-      {findings.map((f) => (
-        <Pressable
-          key={f.id}
-          accessibilityRole="button"
-          accessibilityLabel={`${f.id}, ${f.severity}: ${f.title}`}
-          onPress={() => router.push(`/finding/${f.id}`)}
-          style={({ pressed }) => [s.row, pressed && { backgroundColor: C.raised }]}
-        >
-          <View style={[s.bar, { backgroundColor: SEVERITY[f.severity].dot }]} />
-          <View style={s.body}>
-            <View style={s.head}>
-              <Mono style={{ color: C.muted }}>{f.id}</Mono>
-              <SeverityBadge severity={f.severity} />
-              <StatusBadge status={f.status} />
+      {findings.length === 0 && assessment && <Empty text={`None of the ${assessment.meta.rules} static rules matched. That does not show the repository is secure — only that none of the current rules fired on the files that were read.`} />}
+
+      {findings.map((f) => {
+        const status = statusOf(f, ctx);
+        const line = f.vulnerableCode.lines.find((l) => l.flagged)?.no;
+        return (
+          <Pressable
+            key={f.id}
+            accessibilityRole="button"
+            accessibilityLabel={`${f.id}, ${f.severity}: ${f.title}`}
+            onPress={() => router.push(`/finding/${f.id}`)}
+            style={({ pressed }) => [s.row, pressed && { backgroundColor: C.raised }]}
+          >
+            <View style={[s.bar, { backgroundColor: SEVERITY[f.severity].dot }]} />
+            <View style={s.body}>
+              <View style={s.head}>
+                <Mono style={{ color: C.muted }}>{f.id}</Mono>
+                <SeverityBadge severity={f.severity} />
+                <Badge tone={status.tone}>{status.label}</Badge>
+              </View>
+              <T style={s.title}>{f.title}</T>
+              <Mono style={s.target} numberOfLines={1} ellipsizeMode="head">
+                {mode === "live" ? `${f.vulnerableCode.path}${line ? `:${line}` : ""}` : f.target}
+              </Mono>
+              <T style={s.text} numberOfLines={2}>
+                {f.summary}
+              </T>
             </View>
-            <T style={s.title}>{f.title}</T>
-            <Mono style={s.target} numberOfLines={1}>
-              {f.target}
-            </Mono>
-            <T style={s.text} numberOfLines={2}>
-              {f.summary}
-            </T>
-          </View>
-          <ChevronRight size={16} color={C.faint} />
-        </Pressable>
-      ))}
+            <ChevronRight size={16} color={C.faint} />
+          </Pressable>
+        );
+      })}
     </Screen>
   );
 }
 
 const s = StyleSheet.create({
+  what: { fontSize: 12.5, lineHeight: 18, color: C.muted },
   summary: { flexDirection: "row", flexWrap: "wrap", gap: 14, paddingBottom: 4 },
   count: { flexDirection: "row", alignItems: "center", gap: 6 },
   countDot: { width: 7, height: 7, borderRadius: 4 },

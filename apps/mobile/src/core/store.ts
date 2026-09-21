@@ -10,14 +10,20 @@
  * The same state shape (ArcadeState) would be produced by a real agent
  * backend; only the source of the beats would change.
  */
-import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
-import type { ArcadeState } from "./types";
-import { applyBeat, buildBeats, freshState, type Beat } from "./engine";
+import { useCallback, useEffect, useReducer, useRef } from "react";
+import type { ArcadeState, TerminalLine } from "./types";
+import { applyBeat, buildBeats, freshState, type Beat, type RunPlan } from "./engine";
 
 interface RunState {
   s: ArcadeState;
   cursor: number;
   running: boolean;
+  /** The beats being played — the demo by default, a live plan once loaded. */
+  beats: Beat[];
+  /** The state a reset returns to (matches the current plan). */
+  initial: ArcadeState;
+  /** True once a real assessment plan has been loaded. */
+  live: boolean;
 }
 
 type Action =
@@ -26,10 +32,19 @@ type Action =
   | { type: "START" }
   | { type: "SET_RUNNING"; running: boolean }
   | { type: "RESET" }
+  | { type: "LOAD_DEMO" }
+  | { type: "LOAD_PLAN"; plan: RunPlan; autostart?: boolean }
   | { type: "APPROVE"; id: string }
   | { type: "REJECT"; id: string }
   | { type: "REQUEST_DESTRUCTIVE" }
   | { type: "SET_PROVIDER"; id: string; connected: boolean };
+
+/** Omit that keeps a union a union. */
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
+
+function demoState(): RunState {
+  return { s: freshState(), cursor: 0, running: false, beats: buildBeats(), initial: freshState(), live: false };
+}
 
 function reducer(state: RunState, action: Action): RunState {
   switch (action.type) {
@@ -42,7 +57,13 @@ function reducer(state: RunState, action: Action): RunState {
     case "APPLY":
       return { ...state, s: applyBeat(state.s, action.beat) };
     case "RESET":
-      return { s: freshState(), cursor: 0, running: false };
+      // Back to this plan's starting state, keeping the loaded beats.
+      return { ...state, s: state.initial, cursor: 0, running: false };
+    case "LOAD_DEMO":
+      // Discard any live plan and return to the scripted sample.
+      return demoState();
+    case "LOAD_PLAN":
+      return { s: action.plan.initial, initial: action.plan.initial, beats: action.plan.beats, cursor: 0, running: !!action.autostart, live: true };
     case "APPROVE":
       return {
         ...state,
@@ -97,8 +118,8 @@ function reducer(state: RunState, action: Action): RunState {
 }
 
 export function useArcadeRun() {
-  const beats = useMemo(() => buildBeats(), []);
-  const [state, dispatch] = useReducer(reducer, undefined, () => ({ s: freshState(), cursor: 0, running: false }));
+  const [state, dispatch] = useReducer(reducer, undefined, demoState);
+  const beats = state.beats;
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
@@ -142,6 +163,8 @@ export function useArcadeRun() {
 
   const start = useCallback(() => dispatch({ type: "START" }), []);
   const reset = useCallback(() => dispatch({ type: "RESET" }), []);
+  const resetDemo = useCallback(() => dispatch({ type: "LOAD_DEMO" }), []);
+  const loadPlan = useCallback((plan: RunPlan, autostart = true) => dispatch({ type: "LOAD_PLAN", plan, autostart }), []);
   const approve = useCallback((id: string) => dispatch({ type: "APPROVE", id }), []);
   const reject = useCallback((id: string) => dispatch({ type: "REJECT", id }), []);
   const requestDestructive = useCallback(() => dispatch({ type: "REQUEST_DESTRUCTIVE" }), []);
@@ -151,21 +174,38 @@ export function useArcadeRun() {
     [],
   );
 
+  /** Write a real line into the terminal — output from something that actually ran, not a scripted beat. */
+  const appendTerminal = useCallback((line: TerminalLine) => dispatch({ type: "APPLY", beat: { t: "term", line, delay: 0 } }), []);
+  /**
+   * Apply one state change immediately. This is how a real driver (a git commit, an agent
+   * turn, a test run) reports what actually happened, using the same vocabulary the demo plays.
+   */
+  const apply = useCallback((beat: DistributiveOmit<Beat, "delay">) => dispatch({ type: "APPLY", beat: { ...beat, delay: 0 } as Beat }), []);
+
   const pendingApproval = state.s.approvals.find((a) => a.status === "pending");
-  const progress = Math.min(1, state.cursor / beats.length);
+  const progress = Math.min(1, state.cursor / Math.max(1, beats.length));
+  const done = state.cursor >= beats.length;
 
   return {
     state: state.s,
     running: state.running,
     progress,
     pendingApproval,
+    /** True once a real assessment plan has been loaded (vs the demo). */
+    live: state.live,
+    /** All beats have played. */
+    done,
     start,
     reset,
+    resetDemo,
+    loadPlan,
     approve,
     reject,
     requestDestructive,
     setProvider,
     dismissApproval,
+    appendTerminal,
+    apply,
   };
 }
 

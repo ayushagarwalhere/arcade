@@ -5,6 +5,7 @@
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.2",
     "@expo-google-fonts/jetbrains-mono": "^0.4.1",
+    "@react-native-async-storage/async-storage": "2.2.0",
     "expo": "~57.0.24",
     "expo-clipboard": "~57.0.2",
     "expo-constants": "~57.0.19",
@@ -35,7 +36,9 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "sync:core": "node scripts/sync-core.mjs",
-    "typecheck": "tsc --noEmit"
+    "sync:check": "node scripts/sync-core.mjs --check",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tests",
+    "test": "node scripts/test.mjs"
   },
   "private": true
 }

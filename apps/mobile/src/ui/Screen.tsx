@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { ScrollView, StyleSheet, View, type ScrollViewProps } from "react-native";
 import ApprovalBanner from "./ApprovalBanner";
+import ModeBanner from "./ModeBanner";
 import { C } from "./theme";
 
 /**
@@ -10,6 +11,7 @@ import { C } from "./theme";
 export default function Screen({ children, scroll = true, ...rest }: { children: ReactNode; scroll?: boolean } & ScrollViewProps) {
   return (
     <View style={s.root}>
+      <ModeBanner />
       {scroll ? (
         <ScrollView {...rest} style={s.fill} contentContainerStyle={[s.content, rest.contentContainerStyle]} keyboardShouldPersistTaps="handled">
           {children}

@@ -46,19 +46,26 @@ Desktop installers are not published yet.
 ## The security loop
 
 ```
-Developer → Arcade → Mapper → Attacker → Evidence → Defender
-→ Human approval → Remediator → Tests → Independent Verifier → Verified
+scan → map → findings → root cause → [you approve] → branch → fix → your tests
+→ re-check → commit → [you approve] → push → pull request
 ```
 
-The five agents:
+The first half only reads your source. The second half changes things, so it is carried out for real
+(`apps/ade/src/lib/live-loop.ts`) and every line it prints is the outcome of something that just ran.
 
-| Agent | Role |
+| Stage | What actually happens |
 | --- | --- |
-| **Mapper** | Indexes the repo and builds the attack-surface map. |
-| **Attacker** | Reproduces exploits inside an isolated sandbox, with evidence. |
-| **Defender** | Traces the root cause and ranks mitigations. |
-| **Remediator** | Writes the fix + a regression test on its own worktree. |
-| **Verifier** | Independently re-runs the original attack against the fix. |
+| **Mapper** | Indexes the project and derives its stack, routes and attack-surface map from the real files. |
+| **Attacker** | Static analysis: 14 rules matched against the source. Nothing is executed and no request is sent; the evidence says so. |
+| **Defender** | Traces the root cause and ranks the mitigations for each finding. |
+| **Remediator** | After you approve: creates `arcade/fix-…` with your git, then applies the fix. Two rules (`weak-hash`, `tls-verification-disabled`) have a deterministic rewrite; for every other finding the coding agent installed on your machine (Claude Code, Codex, Gemini CLI, …) writes it. Then the project's own test command runs. |
+| **Verifier** | Re-runs the finding's rule over the patched file. Only if it no longer fires **and** the tests pass is the change committed (just the files the fix touched). A `// FIXME` comment never counts as a fix. |
+| **Ship** | After a second approval: `git push` and a pull request through the GitHub API. Arcade never commits to the branch you were on and never merges. |
+
+Where it runs decides how far it goes: a local folder in the desktop app gets all of it; a repository opened
+from GitHub gets the deterministic rewrites as a branch + pull request through the API (nothing is cloned, so no
+agent and no tests); a folder opened in a browser gets the rewrite saved and re-checked. The **Dry run** on the
+welcome screen is a scripted walkthrough on a bundled sample, and is labelled as one everywhere it appears.
 
 ## Repository layout
 
@@ -278,24 +285,43 @@ no OAuth redirect flow. Two ways in:
 
 ## Desktop app (downloadable)
 
-Arcade also ships as a desktop application (Electron) that bundles the whole ADE. The
-Download button on the site serves the Windows build; macOS and Linux build on their own
-platforms.
+Arcade ships as a desktop application (Electron). The desktop app is the full IDE, because it is the
+only place the things an IDE needs exist: your files, your git, your shell and your coding agents.
+
+| In the desktop app | How |
+| --- | --- |
+| **Editor** | Monaco (the editor from VS Code): editing, multi-cursor, find/replace, minimap, bracket colours, per-file undo. `Ctrl+S` saves; unsaved tabs show a dot. Explorer: new file/folder, rename (`F2`), move to trash, reveal. |
+| **Agent** (`Ctrl+L`) | A real conversation with the agent CLI installed on your machine, run inside the open folder. Streams its text, tool calls and file edits; follow-ups continue the same session; Stop cancels it. Read-only or can-edit, and an optional model override, are in Settings. It runs as you, on your plan: the pane shows the session cost the agent reports. |
+| **Source Control** (`Ctrl+Shift+G`) | Your own `git`: status, stage / unstage / discard, commit (`Ctrl+Enter`), branches, push, open a pull request, recent commits, and a side-by-side diff against `HEAD`. |
+| **Terminal** (``Ctrl+` ``) | Your shell (PowerShell, cmd, Git Bash, zsh…) in the project folder, with history, `cd` and `Ctrl+C`. No pty, so full-screen programs (vim, htop) don't work; builds, tests, git and package managers do. |
+| **Themes** (`Ctrl+,`) | 13 color themes (Arcade Dark/Light, Dark/Light Modern, Monokai, Dracula, One Dark, Nord, GitHub Dark/Light, Solarized Dark/Light, High Contrast), applied to the workbench and the editor from one definition. Also in the command palette (`Ctrl+K`). |
+
+The renderer never gets general access to the machine: every file, git, agent and terminal call names a folder
+you opened through the native picker, and the main process refuses anything else. Prompt text reaches an agent
+only over stdin, never argv. A GitHub token never crosses IPC; the main process reads it from the OS keychain to push.
 
 ```bash
 npm install                 # at the repo root
-npm run desktop:build:win   # Windows: portable .exe + NSIS installer → apps/ade/release/
+npm run desktop:build:win   # Windows: Arcade-Setup.exe + Arcade-portable.exe → apps/ade/release/
 npm run desktop:build       # current OS (mac: .dmg, linux: AppImage + .deb)
 npm run desktop:pack        # unpacked app for a quick local check
 ```
 
-- The static export (`out/`) is produced by `next build` and served inside the app over a
-  privileged `app://` protocol, so the ADE runs fully offline.
-- Artifacts land in `apps/ade/release/` (e.g. `Arcade-0.1.0-portable.exe`, `Arcade-Setup-0.1.0.exe`).
-  Run the portable exe directly, or publish the artifacts to GitHub Releases — the site's
-  Download buttons link to Releases (a 96 MB binary is not bundled into the static site).
-- Dev loop: run `npm run dev`, then `npm run desktop:electron` in a second terminal to open
-  the shell against the live dev server.
+**Releasing.** Push a version tag and [`.github/workflows/release.yml`](.github/workflows/release.yml) builds
+Windows, macOS (arm64 + x64) and Linux installers and attaches them to a GitHub Release:
+
+```bash
+git tag v0.2.0 && git push origin v0.2.0
+```
+
+The site's Download buttons point at `releases/latest/download/<asset>`, and the asset names carry no version,
+so publishing a release is all it takes for them to serve the new build. The builds are unsigned: Windows
+SmartScreen and macOS Gatekeeper warn on first launch until code-signing certificates are added.
+
+- The static export (`out/`) is served inside the app over a privileged `app://` protocol, so it runs offline;
+  the editor is copied out of `node_modules` by `apps/ade/scripts/copy-monaco.mjs` rather than fetched from a CDN.
+- Dev loop: run `npm run dev`, then `npm run desktop:electron` in a second terminal to open the shell against
+  the live dev server.
 
 ### Windows + OneDrive note
 
@@ -314,27 +340,54 @@ The same applies to `apps/mobile/`, which has its own install — see its README
 
 ## Mobile app
 
-Arcade for iOS and Android lives in [`apps/mobile/`](apps/mobile/README.md): watch a run, read the
-evidence and the fix diff, and answer approval gates from your phone. It shares the data
-model and run engine with the ADE (`npm run sync:core` copies them from `packages/core/src`).
+Arcade for iOS and Android lives in [`apps/mobile/`](apps/mobile/README.md). It runs the same engine as the
+workbench (vendored by `npm run sync:core`; `npm run sync:check` fails when the copy is behind), on the phone:
+
+- **Assess a GitHub repository**: connect GitHub, pick a repository, choose a scope, and the scanner reads it
+  through the API at a pinned commit, with live progress, cancel, and an honest failure on a rate limit.
+- **Fix → pull request**: for a finding whose rule has a real rewrite, review the actual diff, then approve a
+  commit to a new `arcade/fix-…` branch and a pull request. Nothing is ever written to the default branch.
+- **No automatic rewrite?** It says so, points you to the desktop app (where your agent can write the fix), and
+  offers to open a GitHub issue with the details instead.
+- The last assessment per repository is kept on the device (no file contents, and matched credentials are
+  redacted); the token stays in the keychain. `arcade://repo/<owner>/<name>` opens a repository.
+- "Sample run" is the scripted walkthrough, labelled as sample data on every screen.
 
 ```bash
 cd apps/mobile
 npm install
-npm start          # scan the QR code with Expo Go, or press a / i for an emulator
+npm start                               # scan the QR code with Expo Go, or press a / i for an emulator
+npm test                                # 20 tests: scanner, adapter, and the write sequence against a fake GitHub
+npx eas build -p android --profile preview   # an installable APK (needs an Expo account)
 ```
+
+Not built: signing in to an Arcade account from the phone. The deployed Cognito client allows no `arcade://`
+callback; adding `arcade://auth` to `authCallbackUrls` in `infra/cdk.json` and redeploying is the prerequisite.
+Nothing has run on a device or emulator yet; the write path is tested against a fake GitHub, not the real API.
 
 ## CLI
 
-The CLI lets you — or another agent — drive the environment. It prefers structured JSON.
+[`packages/cli`](packages/cli/README.md) is the `arcade-security` npm package: a dependency-free CLI and MCP server
+built on the same scanner the workbench uses (bundled into `engine.mjs` by `npm run build:engine -w packages/cli`).
+Every command takes `--json`, and exit codes are made for CI.
 
 ```bash
-node packages/cli/arcade.mjs scan .
-node packages/cli/arcade.mjs findings
-node packages/cli/arcade.mjs evidence ARC-001
-node packages/cli/arcade.mjs verify ARC-001
-node packages/cli/arcade.mjs status --json
+npm i -g arcade-security        # once it is published; until then: npm pack -w packages/cli, or `npm run cli --`
+
+arcade init                     # writes .arcade/config.json (scope, failOn, ignore)
+arcade scan . --fail-on high --sarif arcade.sarif   # real scan; exit 1 at/above the threshold; SARIF for code scanning
+arcade findings                 # from the last scan of this project
+arcade evidence ARC-001
+arcade fix ARC-002              # dry run: prints the patch
+arcade fix ARC-002 --apply --commit --push --pr     # apply, re-check, commit on a branch, push, open a PR (GITHUB_TOKEN)
+arcade fix ARC-001 --agent claude --apply           # no automatic rewrite? have your agent write it, then re-check
+arcade verify ARC-002           # re-run the finding's rule over the file as it is now
+arcade agent "explain src/auth.ts" [--edit] [--model sonnet]
+arcade rules | doctor | agents | connect | sandbox …
 ```
+
+Publishing is one command from `packages/cli` once you are logged in to npm (`npm publish`); `prepack` refuses
+to ship a stale engine bundle. `arcade demo` prints the old sample data, labelled as sample data.
 
 ## MCP server
 
@@ -351,21 +404,26 @@ node packages/cli/arcade.mjs disconnect codex   # undo
 
 `connect` adds one `arcade` entry to the agent's own user-level config (`~/.claude.json`,
 `~/.codex/config.toml`) and leaves everything else in the file alone. In the desktop app the
-same thing is a button: **Agent Providers → connect**. Any other MCP client can launch the
-server directly with `node packages/cli/mcp-server.mjs`.
+same thing is a button: **Agents → Agents that can call Arcade**. Any other MCP client can launch the
+server with `arcade-mcp` (or `node packages/cli/mcp-server.mjs`).
 
-Tools: `arcade_scan`, `arcade_get_attack_surface`, `arcade_get_findings`,
-`arcade_get_evidence`, `arcade_run_attack`, `arcade_request_approval`,
-`arcade_verify_fix`, `arcade_get_status`.
+Tools, all backed by a real scan of the project the agent is working in: `arcade_scan`,
+`arcade_get_findings`, `arcade_get_evidence`, `arcade_get_attack_surface`, `arcade_get_status`,
+`arcade_propose_fix`, `arcade_verify_fix`, `arcade_sandbox_test`, `arcade_sandbox_list`, and
+`arcade_request_approval` / `arcade_get_approval`, which use the Arcade API when `ARCADE_API_URL` and
+`ARCADE_TOKEN` are set and otherwise answer `unavailable` rather than pretending a person was asked.
 
 ## Sandboxing & human control
 
-The attacker runs in a **disposable sandbox** with no network access, no real secrets and
-a throwaway filesystem. Arcade never merges a fix, changes configuration or resets an
-environment on its own — those stop for explicit human approval, with the full evidence
-one click away.
+Scanning is static and executes nothing. Changing code stops for you twice: once before a fix is
+applied (always on a new `arcade/fix-…` branch), and again before anything is pushed. Arcade never
+commits to the branch you were on, never merges, and never commits a fix whose re-check or tests failed.
+The second stop can be turned off in Settings ("Push and open the pull request without asking"); the
+first cannot.
 
-Sandboxes are real Docker containers, built by [`packages/cli/sandbox.mjs`](packages/cli/sandbox.mjs):
+When you want the project's tests run away from your machine's files and network, sandboxes are real
+Docker containers, built by [`packages/cli/sandbox.mjs`](packages/cli/sandbox.mjs) (command palette →
+"Run tests in a Docker sandbox", or the CLI):
 
 ```bash
 node packages/cli/arcade.mjs sandbox test .              # fresh sandbox → run tests → destroy
@@ -386,9 +444,26 @@ Arcade started as a hackathon build and is being turned into a product.
 and the false-positive classifier on a SageMaker serverless endpoint. URLs and ids are in
 [`infra/deployment-prod.json`](infra/deployment-prod.json).
 
-**Real today:** opening a folder or GitHub repository; the static scanner and the fix diffs it produces; the approval
-gates; the Docker sandbox in the CLI; the agent connectors; the backend (accounts, orgs, runs, findings, approvals,
-audit trail, Bedrock endpoints, finding scoring); the ML pipeline, which has trained and promoted a model.
+**Real today:** opening a folder or GitHub repository; the static scanner; the desktop IDE (Monaco editor with
+save, file operations, real git Source Control, a shell terminal, 13 themes); the agent pane and the security
+loop's remediation driving the coding agent installed on your machine; real branches, tests, re-checks, commits,
+pushes and pull requests; the CLI and MCP server (`arcade-security`), including SARIF and CI exit codes; the
+Docker sandbox; the agent connectors; the backend (accounts, orgs, runs, findings, approvals, audit trail,
+Bedrock endpoints, finding scoring); the ML pipeline, which has trained and promoted a model.
+
+**Verified how:** the loop was driven end to end inside Electron against a scratch repository (a real agent
+wrote a parameterized-query fix, `npm test` ran, the rule was re-run, and the commit exists in `git log`);
+the packaged `Arcade.exe` was inspected over the DevTools protocol (bridges, the folder boundary on git / write /
+agent / terminal, Monaco and its TypeScript worker under `app://`); the CLI has 54 tests and was installed from
+its tarball outside the repo. **Not exercised:** a push and a pull request against a real GitHub remote (the code
+paths are wired and their refusals tested, but no token was available); the Codex, Gemini, Cursor and OpenCode
+runners against the real CLIs (only Claude Code was installed; Codex's event format is tested with a stub);
+macOS and Linux builds (the workflow exists, it has not run yet).
+
+**Limits worth knowing:** the scanner is 14 line-level rules with no data-flow analysis, so expect false
+positives and false negatives, and "verified" means the rule no longer fires plus your tests pass, not proof of
+safety. The loop fixes the top finding per run. An agent turn costs what your agent plan charges; on a large
+default model a single turn can cost over a dollar, which is why the model override exists.
 
 **Written, waiting on the next deploy:** sign-in (Cognito, PKCE) and saving each real scan to the backend — run,
 findings, classifier scores, audit entry. It reaches the live site once `Arcade-prod` is redeployed, because the

@@ -19,12 +19,12 @@ export default function ApprovalBanner() {
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`Approval required: ${pendingApproval.title}`}
-      onPress={() => router.push("/approval")}
+      onPress={() => router.push({ pathname: "/approval", params: { id: pendingApproval.id } })}
       style={({ pressed }) => [s.root, { borderTopColor: alpha(accent, 0.4), backgroundColor: destructive ? "#241416" : "#1d1926" }, pressed && { opacity: 0.85 }]}
     >
       <Icon size={16} color={accent} />
       <View style={s.body}>
-        <T style={[s.kicker, { color: accent }]}>{destructive ? "Destructive action — waiting for you" : "Approval required — run paused"}</T>
+        <T style={[s.kicker, { color: accent }]}>{destructive ? "Destructive action — waiting for you" : "Approval required — nothing happens until you decide"}</T>
         <T style={s.title} numberOfLines={1}>
           {pendingApproval.title}
         </T>

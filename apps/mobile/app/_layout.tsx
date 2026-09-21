@@ -8,10 +8,14 @@ import { Inter_500Medium } from "@expo-google-fonts/inter/500Medium";
 import { Inter_600SemiBold } from "@expo-google-fonts/inter/600SemiBold";
 import { JetBrainsMono_400Regular } from "@expo-google-fonts/jetbrains-mono/400Regular";
 import { JetBrainsMono_700Bold } from "@expo-google-fonts/jetbrains-mono/700Bold";
+import { AssessmentProvider } from "@/assess/AssessmentProvider";
 import { RunProvider } from "@/run/RunProvider";
 import { C, F } from "@/ui/theme";
 
 SplashScreen.preventAutoHideAsync();
+
+/** A deep link (arcade://repo/owner/name) lands on a screen with the tabs underneath, so Back has somewhere to go. */
+export const unstable_settings = { anchor: "(tabs)" };
 
 const theme = {
   ...DarkTheme,
@@ -30,25 +34,28 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={theme}>
       <RunProvider>
-        <StatusBar style="light" />
-        <Stack
-          screenOptions={{
-            headerStyle: { backgroundColor: C.chrome },
-            headerTintColor: C.fg,
-            headerTitleStyle: { fontFamily: F.semibold, fontSize: 16, color: C.white },
-            headerShadowVisible: false,
-            headerBackButtonDisplayMode: "minimal",
-            contentStyle: { backgroundColor: C.editor },
-          }}
-        >
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="finding/[id]" options={{ title: "Finding" }} />
-          <Stack.Screen name="approval" options={{ title: "Approval", presentation: "modal" }} />
-          <Stack.Screen name="github" options={{ title: "Connect GitHub", presentation: "modal" }} />
-          <Stack.Screen name="repos" options={{ title: "Repositories" }} />
-          <Stack.Screen name="repo" options={{ title: "Repository" }} />
-          <Stack.Screen name="file" options={{ title: "File" }} />
-        </Stack>
+        <AssessmentProvider>
+          <StatusBar style="light" />
+          <Stack
+            screenOptions={{
+              headerStyle: { backgroundColor: C.chrome },
+              headerTintColor: C.fg,
+              headerTitleStyle: { fontFamily: F.semibold, fontSize: 16, color: C.white },
+              headerShadowVisible: false,
+              headerBackButtonDisplayMode: "minimal",
+              contentStyle: { backgroundColor: C.editor },
+            }}
+          >
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="finding/[id]" options={{ title: "Finding" }} />
+            <Stack.Screen name="approval" options={{ title: "Approval", presentation: "modal" }} />
+            <Stack.Screen name="github" options={{ title: "Connect GitHub", presentation: "modal" }} />
+            <Stack.Screen name="repos" options={{ title: "Repositories" }} />
+            <Stack.Screen name="repo" options={{ title: "Repository" }} />
+            <Stack.Screen name="file" options={{ title: "File" }} />
+            <Stack.Screen name="assess" options={{ title: "Assess repository" }} />
+          </Stack>
+        </AssessmentProvider>
       </RunProvider>
     </ThemeProvider>
   );
