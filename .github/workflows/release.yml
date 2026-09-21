@@ -1,0 +1,95 @@
+# Builds the Arcade desktop app for Windows, macOS and Linux and attaches the
+# installers to a GitHub Release.
+#
+#   git tag v0.2.0 && git push origin v0.2.0
+#
+# The site's Download buttons point at releases/latest/download/<asset>, and the
+# asset names carry no version (apps/ade/package.json → build.*.artifactName), so
+# publishing a release is all it takes for them to serve the new build.
+#
+# The builds are unsigned. Windows SmartScreen and macOS Gatekeeper will warn on
+# first launch until code-signing certificates are added (CSC_LINK / CSC_KEY_PASSWORD
+# for electron-builder, plus Apple notarization credentials for macOS).
+name: Release desktop app
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build and attach installers to (e.g. v0.2.0)"
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+            args: --win portable nsis
+            artifacts: |
+              apps/ade/release/Arcade-Setup.exe
+              apps/ade/release/Arcade-portable.exe
+          - name: macOS
+            os: macos-latest
+            args: --mac dmg
+            artifacts: |
+              apps/ade/release/Arcade-arm64.dmg
+              apps/ade/release/Arcade-x64.dmg
+          - name: Linux
+            os: ubuntu-latest
+            args: --linux AppImage deb
+            artifacts: |
+              apps/ade/release/Arcade-x86_64.AppImage
+              apps/ade/release/Arcade-amd64.deb
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # The desktop app ships the CLI's modules (agent runner, git, scanner engine); fail the
+      # release rather than ship a bundle that is behind the sources it was built from.
+      - name: Check the bundled engine is current
+        run: npm run check:engine -w packages/cli
+
+      - name: Typecheck and test
+        run: |
+          npm run typecheck -w apps/ade
+          npm test -w packages/cli
+
+      - name: Build the app
+        run: npm run build -w apps/ade
+
+      - name: Package
+        working-directory: apps/ade
+        run: npx electron-builder ${{ matrix.args }} --publish never
+        env:
+          # Unsigned on purpose until certificates exist; without this macOS builds stall looking for one.
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: Attach to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          files: ${{ matrix.artifacts }}
+          fail_on_unmatched_files: true
+          generate_release_notes: true

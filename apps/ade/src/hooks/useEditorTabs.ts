@@ -13,7 +13,9 @@ export type EditorTab =
       /** Line to reveal; `jump` changes each time so revealing the same line twice still scrolls. */
       line?: number;
       jump: number;
-    };
+    }
+  /** A changed file compared with HEAD, opened from Source Control. */
+  | { id: string; kind: "diff"; path: string; staged: boolean };
 
 const viewTab = (view: View): EditorTab => ({ id: `view:${view}`, kind: "view", view });
 
@@ -45,6 +47,22 @@ export function useEditorTabs(initial: View = "overview") {
     setActiveId(id);
   };
 
+  const openDiff = (path: string, staged: boolean) => {
+    const id = `diff:${staged ? "s" : "w"}:${path}`;
+    setTabs((ts) => (ts.some((t) => t.id === id) ? ts : [...ts, { id, kind: "diff", path, staged }]));
+    setActiveId(id);
+  };
+
+  /** A file was renamed or deleted: its tabs go with it. */
+  const closePath = (path: string) => {
+    const gone = (t: EditorTab) => t.kind !== "view" && (t.path === path || t.path.startsWith(`${path}/`));
+    setTabs((ts) => {
+      const next = ts.filter((t) => !gone(t));
+      setActiveId((a) => (next.some((t) => t.id === a) ? a : (next[next.length - 1]?.id ?? null)));
+      return next;
+    });
+  };
+
   const pin = (id: string) => setTabs((ts) => ts.map((t) => (t.id === id && t.kind === "file" && t.preview ? { ...t, preview: false } : t)));
 
   const close = (id: string) => {
@@ -60,5 +78,5 @@ export function useEditorTabs(initial: View = "overview") {
     setActiveId(`view:${view}`);
   };
 
-  return { tabs, active, activate: setActiveId, openView, openFile, pin, close, reset };
+  return { tabs, active, activate: setActiveId, openView, openFile, openDiff, closePath, pin, close, reset };
 }

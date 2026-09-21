@@ -5,7 +5,7 @@ import type { ArcadeState, Approval } from "@arcade/core/types";
 import type { GithubRepo } from "@arcade/core/github";
 import { LogoMark } from "@arcade/ui/components/logo";
 import GithubConnect from "@arcade/ui/components/GithubConnect";
-import ThemeToggle from "@arcade/ui/components/ThemeToggle";
+import ThemeSwitch from "./ThemeSwitch";
 
 export interface Layout {
   sidebar: boolean;
@@ -111,7 +111,7 @@ export default function TopBar({
 
         <span className="mx-1 h-4 w-px bg-ade-line" />
 
-        <ThemeToggle variant="ade" />
+        <ThemeSwitch />
 
         {TOGGLES.map(({ k, label, Icon }) => (
           <button

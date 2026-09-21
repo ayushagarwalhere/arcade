@@ -27,7 +27,8 @@ export const SEVERITY: Record<Severity, { label: string; dot: string; text: stri
 };
 
 export const FINDING_STATUS: Record<FindingStatus, { label: string; tone: Tone }> = {
-  reproduced: { label: "Reproduced", tone: "red" },
+  // "Open" is true of both a reproduced exploit (the sample) and a static match (a real project).
+  reproduced: { label: "Open", tone: "red" },
   analyzing: { label: "Analyzing", tone: "violet" },
   "awaiting-approval": { label: "Awaiting approval", tone: "amber" },
   remediating: { label: "Remediating", tone: "violet" },

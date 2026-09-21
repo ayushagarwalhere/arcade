@@ -15,8 +15,19 @@ export const PHASE_LABEL: Record<RunPhase, string> = {
   remediating: "Writing the fix",
   testing: "Running tests",
   verifying: "Independently verifying",
-  verified: "Verified — safe to merge",
+  // A re-check that the rule no longer fires, plus the project's tests: evidence, not a guarantee.
+  verified: "Verified — ready for your review",
 };
+
+/** A real project is analysed statically: nothing is attacked and no exploit is run, and the labels say so. */
+const STATIC_PHASE: Partial<Record<RunPhase, string>> = {
+  attacking: "Matching rules against the source",
+  attacked: "Findings reported",
+  defending: "Tracing root causes",
+  verifying: "Re-checking the fix",
+};
+export const isStaticRun = (state: ArcadeState) => state.finding.evidence.method === "STATIC";
+export const phaseLabel = (state: ArcadeState) => (isStaticRun(state) ? STATIC_PHASE[state.phase] : undefined) ?? PHASE_LABEL[state.phase];
 
 const LOOP: { kind: AgentKind; step: string }[] = [
   { kind: "mapper", step: "Map" },
@@ -62,9 +73,9 @@ export default function Overview({
   return (
     <div className="mx-auto max-w-[860px]">
       <div className="font-mono text-[11.5px] text-ade-muted">
-        {state.project.repo} · {state.environment.sandboxId}
+        {state.project.repo} · {isStaticRun(state) ? "static analysis" : state.environment.sandboxId}
       </div>
-      <h1 className="mt-1 text-[22px] font-semibold tracking-tight text-white">{PHASE_LABEL[state.phase]}</h1>
+      <h1 className="mt-1 text-[22px] font-semibold tracking-tight text-white">{phaseLabel(state)}</h1>
       <p className="mt-1.5 text-[13px] leading-6 text-ade-muted">{state.project.description}</p>
 
       {/* The loop */}
@@ -103,7 +114,7 @@ export default function Overview({
         <Stats
           title="Findings"
           rows={[
-            ["Open", `${findings.length} · ${reproduced} reproduced`],
+            ["Open", isStaticRun(state) ? `${findings.length}` : `${findings.length} · ${reproduced} reproduced`],
             ["Critical", critical, "text-red-300"],
             ["Verified fixes", verifiedFixes, "text-emerald-300"],
             ["Awaiting approval", pending, pending ? "text-violet-300" : undefined],
@@ -154,7 +165,9 @@ export default function Overview({
         ))}
       </div>
       <p className="mt-4 text-[12px] leading-5 text-ade-faint">
-        Posture is measured, not scored: counts of surface, reproduced findings, and fixes that a separate agent re-attacked and could not break.
+        {isStaticRun(state)
+          ? "Posture is measured, not scored: counts of what the rules matched in your source, and of fixes that were re-checked after they landed. Static analysis can miss things and flag things that aren't reachable; treat it as a list to review."
+          : "Posture is measured, not scored: counts of surface, reproduced findings, and fixes that a separate agent re-attacked and could not break."}
       </p>
     </div>
   );

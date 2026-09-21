@@ -35,30 +35,31 @@ function codeWindow(source: string | undefined, line: number) {
   const from = Math.max(0, line - 4);
   const to = Math.min(all.length, line + 2);
   const lines = [];
-  for (let i = from; i < to; i++) lines.push({ no: i + 1, text: all[i], flagged: i + 1 === line });
+  // A CRLF file split on "\n" leaves "\r" on every line; nothing downstream wants it.
+  for (let i = from; i < to; i++) lines.push({ no: i + 1, text: all[i].replace(/\r$/, ""), flagged: i + 1 === line });
   return { lines };
 }
 
-function evidenceFor(hit: Hit, sandboxId: string): Evidence {
+/**
+ * What a static match actually establishes, and nothing more: which rule fired, where, and on
+ * what text. No request was sent and nothing ran, so there is no response and no reproduction
+ * to claim. `method: "STATIC"` is what tells a view to present it that way.
+ */
+function evidenceFor(hit: Hit): Evidence {
   const loc = `${hit.path}:${hit.match.line}`;
   return {
     method: "STATIC",
     target: loc,
-    requestHeaders: [
-      `X-Arcade-Sandbox: ${sandboxId}`,
-      `X-Arcade-Rule: ${hit.rule.id}`,
-      "X-Arcade-Mode: read-only static analysis",
-    ],
+    requestHeaders: [`rule: ${hit.rule.id}`, "analysis: static · source only · nothing executed"],
     requestBody: hit.match.captured ? `matched: ${hit.match.captured.slice(0, 120)}` : undefined,
-    statusBefore: "reachable",
+    statusBefore: "pattern present",
     responseBody: hit.match.excerpt,
     steps: [
-      `Located ${hit.rule.cwe.split("·")[0].trim()} pattern at ${loc}`,
+      `The ${hit.rule.id} rule (${hit.rule.cwe.split("·")[0].trim()}) matched at ${loc}.`,
       hit.rule.attackNarrative,
-      "Confirmed the pattern is on a reachable path (no live request issued)",
-      `Saved reproduction → evidence/${hit.rule.id}.json`,
+      "This is a static match: no request was sent and no code ran, so whether the line is reachable at runtime has not been confirmed. Read the code around it before acting.",
     ],
-    artifact: `evidence/${hit.path.replace(/[\\/]/g, "_")}-${hit.match.line}.json`,
+    artifact: "exported on demand",
     capturedAt: stamp(),
   };
 }
@@ -80,7 +81,7 @@ export function toFinding(hit: Hit, index: number, scan: Scan): Finding {
     description: `${hit.rule.description} Found at ${at}.`,
     attackNarrative: hit.rule.attackNarrative,
     vulnerableCode: { path: hit.path, ...codeWindow(source, hit.match.line) },
-    evidence: evidenceFor(hit, sandboxId(scan)),
+    evidence: evidenceFor(hit),
     mitigations: hit.rule.mitigations,
     // Filled by the remediator; empty until then.
     remediation: { branch: "", commit: "", summary: "", rootCause: "", files: [], tests: [], commands: [] },

@@ -246,10 +246,13 @@ export const RULES: Rule[] = [
       mit("Use a password KDF for passwords", "Store passwords with argon2 / bcrypt / scrypt, never a raw hash.", false, "medium"),
     ],
     fix: ({ line, id }) => {
-      const fixed = line.replace(/md5|sha1/i, "sha256").replace(/MD5|SHA-?1/i, "SHA-256");
-      return fixed !== line
-        ? { mode: "replace", add: [fixed], note: "Upgrade the hash to SHA-256" }
-        : guard({ id });
+      // Only the algorithm name inside the call is rewritten — never an identifier that happens to
+      // contain "md5". A bare MD5(...) helper has no drop-in replacement, so it goes to review.
+      const fixed = line
+        .replace(/(createHash\s*\(\s*["'])(?:md5|sha1)(["'])/gi, "$1sha256$2")
+        .replace(/(hashlib\.)(?:md5|sha1)(\s*\()/g, "$1sha256$2")
+        .replace(/(MessageDigest\.getInstance\s*\(\s*["'])(?:MD5|SHA-?1)(["'])/gi, "$1SHA-256$2");
+      return fixed !== line ? { mode: "replace", add: [fixed], note: "Upgrade the hash to SHA-256" } : guard({ id });
     },
   },
   {
@@ -289,7 +292,16 @@ export const RULES: Rule[] = [
       mit("Re-enable verification", "Remove the flag so certificates are validated against trusted roots.", true, "low"),
       mit("Pin or add the real CA", "If the peer uses a private CA, trust that CA explicitly instead of disabling checks.", false, "medium"),
     ],
-    fix: () => ({ mode: "remove", note: "Remove the flag that disables certificate verification" }),
+    fix: ({ line, id }) => {
+      // Flip the flag where it stands. Deleting the line would take anything else on it along, and
+      // an explicit `true` survives a later default change. Forms with no safe in-place value go to review.
+      const fixed = line
+        .replace(/(rejectUnauthorized\s*:\s*)false/, "$1true")
+        .replace(/(\bverify\s*=\s*)False/, "$1True")
+        .replace(/(InsecureSkipVerify\s*:\s*)true/, "$1false")
+        .replace(/(CURLOPT_SSL_VERIFYPEER\s*,\s*)(?:0|false)/, "$1true");
+      return fixed !== line ? { mode: "replace", add: [fixed], note: "Turn certificate verification back on" } : guard({ id });
+    },
   },
   {
     id: "open-cors",
@@ -308,7 +320,9 @@ export const RULES: Rule[] = [
       mit("Allow only known origins", "Echo back a specific, validated origin from an allow-list instead of '*'.", true, "low"),
       mit("Never pair '*' with credentials", "If cookies are sent, a concrete origin is mandatory.", false, "low"),
     ],
-    fix: ({ line }) => ({ mode: "replace", add: [line.replace("*", "https://app.example.com")], note: "Restrict the allowed origin to a known host" }),
+    // Which origins are legitimate is something only the project knows; a made-up host would break
+    // the app, so this rule describes the fix and leaves writing it to an agent or a person.
+    fix: guard,
   },
   {
     id: "weak-jwt",
@@ -392,7 +406,10 @@ export const RULES: Rule[] = [
       const privilegedVerb = /\b(POST|PUT|DELETE|PATCH)\b|def (post|put|delete|patch)|\.(post|put|delete|patch)\s*\(|SELECT\s+\*|DELETE\s+FROM|UPDATE\s+/i;
       if (!authRe.test(text) || roleRe.test(text) || !privilegedVerb.test(text)) return [];
       const lines = text.split("\n");
-      const at = lines.findIndex((l) => authRe.test(l));
+      // Point at where the handler authenticates, not at the line that imports the helper.
+      const isImport = (l: string) => /^\s*(?:import\b|from\b|export\s+\{|(?:const|let|var)\s+.*=\s*require\s*\()/.test(l);
+      const used = lines.findIndex((l) => authRe.test(l) && !isImport(l));
+      const at = used >= 0 ? used : lines.findIndex((l) => authRe.test(l));
       if (at < 0) return [];
       return [{ line: at + 1, column: 0, excerpt: lines[at].trim(), captured: "authn without authz" }];
     },

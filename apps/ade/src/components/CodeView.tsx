@@ -1,8 +1,10 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FileWarning, Loader2 } from "lucide-react";
+import { loader } from "@monaco-editor/react";
 import { formatBytes, languageOf, type FileContent, type WorkspaceFs } from "@arcade/core/fs";
 import { TOKEN_COLOR, highlight } from "@arcade/core/highlight";
+import CodeEditor from "./CodeEditor";
 
 export interface FileInfo {
   path: string;
@@ -16,7 +18,7 @@ const OVERSCAN = 12;
 
 type Loaded = { fs: WorkspaceFs; path: string; content: FileContent | null };
 
-/** Read-only editor for one workspace file. */
+/** One workspace file: the code editor for text, a preview for images, and a plain notice for anything else. */
 export default function CodeView({
   fs,
   path,
@@ -24,6 +26,9 @@ export default function CodeView({
   jump,
   flagged,
   onInfo,
+  onCursor,
+  onSaved,
+  onError,
 }: {
   fs: WorkspaceFs;
   path: string;
@@ -33,9 +38,24 @@ export default function CodeView({
   /** Lines a finding points at. */
   flagged?: number[];
   onInfo: (info: FileInfo) => void;
+  onCursor?: (pos: { line: number; column: number }) => void;
+  onSaved?: (path: string) => void;
+  onError?: (message: string) => void;
 }) {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const current = loaded && loaded.fs === fs && loaded.path === path ? loaded : null;
+
+  const [editorFailed, setEditorFailed] = useState(false);
+  useEffect(() => {
+    let live = true;
+    loader.init().then(
+      () => {},
+      () => live && setEditorFailed(true),
+    );
+    return () => {
+      live = false;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -91,8 +111,12 @@ export default function CodeView({
     );
   }
 
-  // Windows line endings would otherwise render as an extra break per row.
-  return <Code key={path} text={content.text.replace(/\r\n?/g, "\n")} path={path} line={line} jump={jump} flagged={flagged} />;
+  // The plain viewer stands in if the editor can't load (its files are missing, say): reading still works.
+  if (editorFailed) {
+    // Windows line endings would otherwise render as an extra break per row.
+    return <Code key={path} text={content.text.replace(/\r\n?/g, "\n")} path={path} line={line} jump={jump} flagged={flagged} />;
+  }
+  return <CodeEditor fs={fs} path={path} text={content.text} line={line} jump={jump} flagged={flagged} onCursor={onCursor} onSaved={onSaved} onError={onError} />;
 }
 
 function Code({ text, path, line, jump, flagged }: { text: string; path: string; line?: number; jump: number; flagged?: number[] }) {

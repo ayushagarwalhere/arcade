@@ -47,3 +47,6 @@ next-env.d.ts
 
 # large downloadable artifacts served by the site (built locally / via Releases)
 /public/download/
+
+# the editor, copied out of node_modules by scripts/copy-monaco.mjs
+/public/arcade-static/monaco/

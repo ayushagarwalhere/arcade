@@ -1,12 +1,14 @@
-// Workspace access for the renderer: folder pickers plus read-only listing and
-// reading of files inside a folder the user picked.
+// Workspace access for the renderer: folder pickers, listing and reading files
+// inside a folder the user picked, and the edits an IDE makes to them (save,
+// new file / folder, rename, move to trash).
 //
-// The renderer never gets general filesystem access. Every root it may read is
+// The renderer never gets general filesystem access. Every root it may touch is
 // one the user chose in a native dialog; those roots are remembered in
 // userData so "previous workspaces" can be reopened after a restart, and every
 // path is resolved (symlinks included) and checked to still be inside its root.
+// Deleting sends a file to the OS trash, so it can be brought back.
 
-const { app, BrowserWindow, dialog, ipcMain } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
 const path = require("path");
 const fs = require("fs");
 
@@ -54,6 +56,32 @@ async function resolveInside(root, rel) {
   const within = path.relative(realRoot, realTarget);
   if (within.startsWith("..") || path.isAbsolute(within)) throw new Error("Path is outside the workspace");
   return realTarget;
+}
+
+/**
+ * Like resolveInside, for a path that may not exist yet: the nearest existing
+ * ancestor is what gets resolved and checked, so a symlinked folder can't be
+ * used to write outside the workspace.
+ */
+async function resolveNewInside(root, rel) {
+  if (typeof root !== "string" || typeof rel !== "string" || !rel || !allowedRoots().has(root)) throw new Error("Workspace is not open");
+  const parts = rel.split(/[\\/]+/).filter(Boolean);
+  if (!parts.length || parts.some((p) => p === "." || p === ".." || /[<>:"|?*\0]/.test(p))) throw new Error("That isn't a valid file name");
+  if (parts[0].toLowerCase() === ".git") throw new Error("Arcade doesn't write inside .git");
+  const realRoot = await fs.promises.realpath(root);
+  let existing = realRoot;
+  let i = 0;
+  for (; i < parts.length; i++) {
+    const next = path.join(existing, parts[i]);
+    try {
+      existing = await fs.promises.realpath(next);
+    } catch {
+      break;
+    }
+  }
+  const within = path.relative(realRoot, existing);
+  if (within.startsWith("..") || path.isAbsolute(within)) throw new Error("Path is outside the workspace");
+  return path.join(existing, ...parts.slice(i));
 }
 
 const describe = (fp) => ({ name: path.basename(fp), path: fp });
@@ -123,6 +151,60 @@ function registerWorkspaceIpc() {
     const data = await fs.promises.readFile(file);
     if (data.subarray(0, 8000).includes(0)) return { kind: "binary", size };
     return { kind: "text", size, text: data.toString("utf8") };
+  });
+
+  // Save. Written to a sibling temp file and renamed, so a crash never leaves half a file.
+  ipcMain.handle("workspace:write-file", async (_e, root, rel, text) => {
+    if (typeof text !== "string") throw new Error("Only text can be saved");
+    if (Buffer.byteLength(text) > MAX_TEXT_BYTES * 4) throw new Error("That file is too large to save from the editor");
+    const file = await resolveNewInside(root, rel);
+    await fs.promises.mkdir(path.dirname(file), { recursive: true });
+    let mode;
+    try {
+      mode = (await fs.promises.stat(file)).mode & 0o777;
+    } catch {
+      /* new file */
+    }
+    const tmp = `${file}.arcade-${process.pid}.tmp`;
+    await fs.promises.writeFile(tmp, text, mode ? { mode } : undefined);
+    try {
+      await fs.promises.rename(tmp, file);
+    } catch (e) {
+      await fs.promises.rm(tmp, { force: true });
+      throw e;
+    }
+    return { size: Buffer.byteLength(text) };
+  });
+
+  // New file or folder. Refuses to replace something that is already there.
+  ipcMain.handle("workspace:create", async (_e, root, rel, kind) => {
+    const target = await resolveNewInside(root, rel);
+    if (fs.existsSync(target)) throw new Error(`${path.basename(target)} already exists`);
+    if (kind === "dir") await fs.promises.mkdir(target, { recursive: true });
+    else {
+      await fs.promises.mkdir(path.dirname(target), { recursive: true });
+      await fs.promises.writeFile(target, "", { flag: "wx" });
+    }
+  });
+
+  ipcMain.handle("workspace:rename", async (_e, root, from, to) => {
+    const source = await resolveInside(root, from);
+    const target = await resolveNewInside(root, to);
+    if (source === (await fs.promises.realpath(root))) throw new Error("The workspace folder itself can't be renamed from here");
+    if (fs.existsSync(target) && source.toLowerCase() !== target.toLowerCase()) throw new Error(`${path.basename(target)} already exists`);
+    await fs.promises.mkdir(path.dirname(target), { recursive: true });
+    await fs.promises.rename(source, target);
+  });
+
+  // To the OS trash, not gone: a slip in the explorer stays recoverable.
+  ipcMain.handle("workspace:trash", async (_e, root, rel) => {
+    const target = await resolveInside(root, rel);
+    if (target === (await fs.promises.realpath(root))) throw new Error("The workspace folder itself can't be deleted from here");
+    await shell.trashItem(target);
+  });
+
+  ipcMain.handle("workspace:reveal", async (_e, root, rel) => {
+    shell.showItemInFolder(await resolveInside(root, rel));
   });
 }
 

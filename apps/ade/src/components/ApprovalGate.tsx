@@ -29,7 +29,7 @@ export default function ApprovalGate({
         <div className="text-[13px] font-medium text-white">{approval.title}</div>
         <p className="mt-0.5 text-[12px] leading-5 text-ade-muted">{approval.reason}</p>
         <div className="mt-2 break-words rounded border border-ade-line bg-ade-base px-2 py-1.5 font-mono text-[11.5px] leading-5 text-ade-fg/85">{approval.target}</div>
-        {ship && <p className="mt-2 text-[11.5px] leading-5 text-emerald-300/90">ARC-001 verified fixed · original exploit returns 403 · 156/156 tests pass</p>}
+        {approval.evidence && <p className="mt-2 text-[11.5px] leading-5 text-emerald-300/90">{approval.evidence}</p>}
       </div>
 
       <div className="flex items-center gap-1.5 border-t border-ade-line px-2.5 py-2">
@@ -52,7 +52,7 @@ export default function ApprovalGate({
           onClick={() => onApprove(approval.id)}
           className={`h-6 rounded px-2.5 text-[12px] font-medium text-black transition ${destructive ? "bg-red-400 hover:bg-red-300" : "bg-ade-fg hover:bg-white"}`}
         >
-          {destructive ? "Allow once" : ship ? "Approve & merge" : "Approve"}
+          {approval.approveLabel ?? (destructive ? "Allow once" : "Approve")}
         </button>
       </div>
     </div>

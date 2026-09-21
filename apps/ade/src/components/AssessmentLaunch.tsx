@@ -46,7 +46,8 @@ export default function AssessmentLaunch({
     try {
       const assessment = await runAssessment(
         fs,
-        { profile, scope, projectName: project.name, projectPath: project.path },
+        // The workbench carries the fix out for real after this, so the assessment pre-fills no results.
+        { profile, scope, projectName: project.name, projectPath: project.path, handoff: true },
         (p) => !cancelled.current && setProgress(p),
         () => cancelled.current,
       );
@@ -74,14 +75,14 @@ export default function AssessmentLaunch({
           <h1 className="text-[19px] font-semibold tracking-tight text-white">Assess this workspace</h1>
         </div>
         <p className="mt-1.5 text-[13px] text-ade-muted">
-          Arcade will map <span className="text-ade-fg/85">{project.name}</span>, reproduce weaknesses in a sandbox, and propose fixes — pausing for your approval before anything changes.
+          Arcade will map <span className="text-ade-fg/85">{project.name}</span>, find what is weak, and rank the fixes. Then, with your approval, it fixes the top finding on its own branch, runs your tests, re-checks it and commits.
         </p>
 
-        {/* Sandbox guarantee */}
+        {/* What the scan does and doesn't do */}
         <div className="mt-5 flex items-start gap-3 rounded-md border border-emerald-500/20 bg-emerald-500/[0.06] px-4 py-3">
           <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" strokeWidth={1.8} />
           <p className="text-[12.5px] leading-5 text-emerald-100/80">
-            <span className="font-semibold text-emerald-200">Sandboxed &amp; read-only.</span> The assessment analyses your source in an isolated process. It never executes your code, changes files, or makes network calls. Fixes are proposals; applying or merging them waits behind an approval gate.
+            <span className="font-semibold text-emerald-200">The scan only reads.</span> It analyses your source statically: it never executes your code, changes files, or makes network calls. Changing code comes after, and only when you approve it: once to apply a fix on a new branch, and again before anything is pushed.
           </p>
         </div>
 
@@ -93,11 +94,11 @@ export default function AssessmentLaunch({
               <div className="mt-2 flex gap-2">
                 <button onClick={() => setProfile("full")} className={`${CARD} ${profile === "full" ? on : off}`}>
                   <span className="block text-[13px] text-ade-fg">Full loop</span>
-                  <span className="mt-0.5 block text-[11.5px] leading-4 text-ade-faint">Map → attack → fix → verify, all five agents</span>
+                  <span className="mt-0.5 block text-[11.5px] leading-4 text-ade-faint">Find → fix on a branch → test → re-check → commit</span>
                 </button>
                 <button onClick={() => setProfile("scan-only")} className={`${CARD} ${profile === "scan-only" ? on : off}`}>
                   <span className="block text-[13px] text-ade-fg">Scan only</span>
-                  <span className="mt-0.5 block text-[11.5px] leading-4 text-ade-faint">Map &amp; attack — find and report, no fixes</span>
+                  <span className="mt-0.5 block text-[11.5px] leading-4 text-ade-faint">Find and report. Nothing is changed.</span>
                 </button>
               </div>
             </div>
@@ -160,7 +161,7 @@ export default function AssessmentLaunch({
               <div className="min-w-0 flex-1">
                 <div className="text-[13px] text-ade-fg">{progress?.label ?? "Starting…"}</div>
                 <div className="mt-0.5 font-mono text-[11.5px] text-ade-faint">
-                  {progress ? `${progress.filesScanned} files · ${progress.findings} findings` : "preparing sandbox"}
+                  {progress ? `${progress.filesScanned} files · ${progress.findings} findings` : "indexing files"}
                 </div>
               </div>
               <button onClick={cancel} className="h-7 shrink-0 rounded px-2.5 text-[12px] text-ade-muted transition hover:text-ade-fg">

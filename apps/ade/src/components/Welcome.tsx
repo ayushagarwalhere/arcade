@@ -4,7 +4,7 @@ import { FlaskConical, FolderOpen, FolderPlus, HardDrive, History } from "lucide
 import { LogoMark } from "@arcade/ui/components/logo";
 import { GithubIcon } from "@arcade/ui/components/icons";
 import GithubConnect, { GithubConnectForm } from "@arcade/ui/components/GithubConnect";
-import ThemeToggle from "@arcade/ui/components/ThemeToggle";
+import ThemeSwitch from "./ThemeSwitch";
 import GithubRepos from "@arcade/ui/components/GithubRepos";
 import { FolderAccessUnavailable, createFolder, isDesktop, loadRecents, openFolder, type WorkspaceRef } from "@arcade/core/workspace";
 import { repoWorkspace, useGithub } from "@arcade/core/github";
@@ -74,7 +74,7 @@ export default function Welcome({
     <div className="page-ground flex h-full flex-col bg-ade-editor text-ade-fg">
       <header className="flex h-9 shrink-0 items-center justify-end gap-1 px-2.5">
         <GithubConnect variant="ade" onOpenRepo={(r) => onOpen(repoWorkspace(r))} />
-        <ThemeToggle variant="ade" />
+        <ThemeSwitch />
       </header>
       <div className="scrollbar-thin grid min-h-0 flex-1 place-items-center overflow-y-auto px-6 py-10">
         <div className="w-full max-w-[700px]">

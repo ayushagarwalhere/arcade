@@ -3,3 +3,31 @@
 
 /* Tailwind only scans this app by default; class names also live in the shared packages. */
 @source "../../../../packages";
+
+/* Code editor: a line a finding points at (decorations set in components/CodeEditor.tsx). */
+.arcade-flagged-line {
+  background: rgba(239, 68, 68, 0.12);
+  box-shadow: inset 2px 0 0 #f87171;
+}
+.arcade-flagged-glyph::before {
+  content: "";
+  display: block;
+  width: 7px;
+  height: 7px;
+  margin: 6px auto 0;
+  border-radius: 9999px;
+  background: #f87171;
+}
+
+/* The editor draws its own widgets; keep them on the workbench's type. */
+.monaco-editor .suggest-widget,
+.monaco-editor .monaco-hover,
+.monaco-editor .find-widget {
+  font-family: var(--font-sans);
+}
+
+/* Terminal output keeps its own colours whatever the theme. */
+.arcade-term {
+  font-family: var(--font-mono);
+  font-variant-ligatures: none;
+}

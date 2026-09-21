@@ -38,7 +38,88 @@ export default function Evidence({ state }: { state: ArcadeState }) {
     return (
       <div className="rounded-md border border-dashed border-ade-line bg-ade-base p-10 text-center">
         <FileSearch className="mx-auto h-6 w-6 text-white/30" />
-        <p className="mt-3 text-[13px] text-white/50">No evidence captured yet. Run the attacker to reproduce an exploit.</p>
+        <p className="mt-3 text-[13px] text-white/50">No evidence yet. It appears once the scan has reported its findings.</p>
+      </div>
+    );
+  }
+
+  // A finding from static analysis: a rule matched some source. There was no request and no
+  // response, so none is drawn — what is shown is the match, the code, and what it does and doesn't prove.
+  if (ev.method === "STATIC") {
+    return (
+      <div className="grid gap-4 lg:grid-cols-[1.35fr_1fr]">
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <span className="font-mono text-[13px] text-white/50">{f.id}</span>
+            <h2 className="text-[16px] font-semibold text-white">{f.title}</h2>
+            <SeverityBadge severity={f.severity} />
+          </div>
+
+          <div className="overflow-hidden rounded-md border border-ade-line bg-ade-base">
+            <div className="flex items-center gap-2 border-b border-ade-line px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-white/40">
+              Static match
+              <Badge tone="amber" className="ml-auto">
+                not executed
+              </Badge>
+            </div>
+            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 p-4 font-mono text-[12.5px]">
+              <dt className="text-white/40">where</dt>
+              <dd className="break-all text-white/85">{ev.target}</dd>
+              {ev.requestHeaders.map((h) => {
+                const [k, ...v] = h.split(": ");
+                return (
+                  <div key={h} className="contents">
+                    <dt className="text-white/40">{k}</dt>
+                    <dd className="text-white/70">{v.join(": ")}</dd>
+                  </div>
+                );
+              })}
+              {ev.requestBody && (
+                <>
+                  <dt className="text-white/40">token</dt>
+                  <dd className="break-all text-white/70">{ev.requestBody.replace(/^matched: /, "")}</dd>
+                </>
+              )}
+            </dl>
+          </div>
+
+          <div className="overflow-hidden rounded-md border border-red-500/20 bg-ade-base">
+            <div className="border-b border-ade-line px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-white/40">Matched code · {f.vulnerableCode.path}</div>
+            <div className="scrollbar-thin overflow-x-auto py-2 font-mono text-[12.5px] leading-6">
+              {f.vulnerableCode.lines.map((l) => (
+                <div key={l.no} className={`flex whitespace-pre px-4 ${l.flagged ? "bg-red-500/[0.10] text-white/90" : "text-white/55"}`}>
+                  <span className={`w-10 shrink-0 select-none pr-3 text-right ${l.flagged ? "text-red-300" : "text-white/25"}`}>{l.no}</span>
+                  {l.text}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-md border border-ade-line bg-ade-base p-4">
+            <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-white/40">What this establishes</div>
+            <ol className="space-y-1.5">
+              {ev.steps.map((s, i) => (
+                <li key={i} className="flex gap-2.5 text-[13px] leading-[1.5] text-white/70">
+                  <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border border-white/15 text-[11px] text-white/50">{i + 1}</span>
+                  {s}
+                </li>
+              ))}
+            </ol>
+            <div className="mt-3">
+              <button onClick={exportJson} className="flex items-center gap-1.5 rounded border border-ade-line px-3 py-1.5 text-[12px] text-white/75 transition hover:bg-white/[0.05]">
+                <Download className="h-3.5 w-3.5" /> Export finding as JSON
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-md border border-ade-line bg-ade-base p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <div className="text-[13px] font-semibold text-white/85">Trail</div>
+            <span className="text-[11px] text-white/40">found {ev.capturedAt}</span>
+          </div>
+          <TimelineList events={f.timeline} empty="Fills in as the run progresses." />
+        </div>
       </div>
     );
   }

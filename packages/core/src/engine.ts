@@ -35,6 +35,8 @@ export interface GateDef {
   title: string;
   reason: string;
   target: string;
+  evidence?: string;
+  approveLabel?: string;
 }
 
 /** A ready-to-play run: the ordered beats and the state they start from. */
@@ -67,7 +69,7 @@ export function freshState(): ArcadeState {
   };
 }
 
-export const APPROVAL_DEFS: Record<string, { kind: "code" | "ship"; title: string; reason: string; target: string }> = {
+export const APPROVAL_DEFS: Record<string, GateDef> = {
   "approve-fix": {
     kind: "code",
     title: "Apply the proposed fix",
@@ -79,6 +81,8 @@ export const APPROVAL_DEFS: Record<string, { kind: "code" | "ship"; title: strin
     title: "Merge the verified fix to main",
     reason: "ARC-001 is verified fixed (200 OK → 403 Forbidden). Merging closes the finding.",
     target: "fix/admin-export-authz → main",
+    evidence: "ARC-001 verified fixed · original exploit returns 403 · 156/156 tests pass",
+    approveLabel: "Approve & merge",
   },
 };
 

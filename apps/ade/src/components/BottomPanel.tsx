@@ -3,8 +3,11 @@ import { CircleX, Info, TriangleAlert, X } from "lucide-react";
 import type { ArcadeState, Finding } from "@arcade/core/types";
 import { FINDING_STATUS } from "./atoms";
 import TerminalView from "./views/TerminalView";
+import ShellTerminal from "./ShellTerminal";
+import type { Terminal } from "@/hooks/useTerminal";
 
-export type PanelTab = "problems" | "output" | "terminal";
+/** "terminal" is your shell; "runlog" is what Arcade's own loop printed. */
+export type PanelTab = "problems" | "output" | "runlog" | "terminal";
 
 const SEVERITY_ICON = {
   critical: { Icon: CircleX, color: "text-red-400" },
@@ -16,6 +19,7 @@ const SEVERITY_ICON = {
 export default function BottomPanel({
   state,
   findings,
+  term,
   tab,
   onTab,
   onOpenFinding,
@@ -23,6 +27,7 @@ export default function BottomPanel({
 }: {
   state: ArcadeState;
   findings: Finding[];
+  term: Terminal;
   tab: PanelTab;
   onTab: (t: PanelTab) => void;
   onOpenFinding: (id: string) => void;
@@ -31,6 +36,7 @@ export default function BottomPanel({
   const TABS: { id: PanelTab; label: string; count?: number }[] = [
     { id: "problems", label: "Problems", count: findings.length },
     { id: "output", label: "Output" },
+    { id: "runlog", label: "Run log" },
     { id: "terminal", label: "Terminal" },
   ];
 
@@ -50,14 +56,15 @@ export default function BottomPanel({
           </button>
         ))}
         <span className="flex-1" />
-        {tab === "terminal" && <span className="hidden font-mono text-[11px] text-ade-faint sm:block">arcade — {state.environment.sandboxId}</span>}
+        {tab === "terminal" && term.available && <span className="hidden font-mono text-[11px] text-ade-faint sm:block">{term.shell}</span>}
         <button onClick={onClose} title="Close panel (Ctrl+J)" aria-label="Close panel" className="grid h-6 w-6 place-items-center rounded text-ade-muted transition hover:bg-white/[0.06] hover:text-ade-fg">
           <X className="h-3.5 w-3.5" />
         </button>
       </div>
 
       <div className="min-h-0 flex-1">
-        {tab === "terminal" && <TerminalView state={state} />}
+        {tab === "runlog" && <TerminalView state={state} />}
+        {tab === "terminal" && <ShellTerminal term={term} />}
 
         {tab === "problems" && (
           <div className="scrollbar-thin h-full overflow-y-auto py-1">

@@ -22,4 +22,6 @@ rmSync(web, { recursive: true, force: true });
 cpSync(path.join(root, "apps/marketing/out"), web, { recursive: true });
 cpSync(path.join(root, "apps/ade/out/arcade"), path.join(web, "arcade"), { recursive: true });
 cpSync(path.join(root, "apps/ade/out/_next"), path.join(web, PREFIX.slice(1), "_next"), { recursive: true });
+// The ADE's own public files (the code editor) already live under /arcade-static.
+cpSync(path.join(root, "apps/ade/out", PREFIX.slice(1)), path.join(web, PREFIX.slice(1)), { recursive: true });
 console.log("\nStatic site ready in dist/web");

@@ -1,5 +1,6 @@
-// Coding-agent connections for the renderer: is Claude Code / Codex installed,
-// is Arcade's MCP server registered with it, and connect / disconnect.
+// Coding agents for the renderer, in both directions: registering Arcade's MCP
+// server with Claude Code / Codex (connect / disconnect), and running an installed
+// agent's own CLI inside the open project (detect / run / cancel).
 //
 // The work is done by the same connector the CLI uses (packages/cli/connect.mjs), which
 // edits only the `arcade` entry of each agent's own config file. The renderer
@@ -38,7 +39,7 @@ function serverSpec({ findOnPath }) {
   return { command: process.execPath, args: [script], env: { ELECTRON_RUN_AS_NODE: "1" } };
 }
 
-function registerAgentsIpc() {
+function registerAgentsIpc({ isAllowedRoot }) {
   // Keep an already-registered copy in step with this version of the app.
   try {
     if (fs.existsSync(stableCli())) syncCli();
@@ -68,6 +69,48 @@ function registerAgentsIpc() {
     const c = await loadConnector();
     return c.disconnectAgent(String(id));
   });
+
+  /* ---- Running an agent (packages/cli/agent-runner.mjs) -------------------
+   * The renderer names an opened folder, an agent, and what to say to it. Which
+   * binary runs, with which arguments, is decided by the runner: prompt text only
+   * ever reaches the agent over stdin.
+   */
+  const runs = new Map(); // runId -> AbortController
+  const MAX_RUNS = 3;
+  const MAX_PROMPT = 200_000;
+
+  ipcMain.handle("agents:detect", async () => (await loadRunner()).detectAgents());
+
+  ipcMain.handle("agents:run", async (event, root, req) => {
+    if (!isAllowedRoot(root)) throw new Error("Workspace is not open");
+    if (runs.size >= MAX_RUNS) throw new Error("Too many agents are running. Stop one first.");
+    const prompt = String(req?.prompt ?? "");
+    if (prompt.length > MAX_PROMPT) throw new Error("That prompt is too long.");
+    const history = Array.isArray(req?.history) ? req.history.slice(-20).map((t) => ({ role: t?.role === "user" ? "user" : "assistant", text: String(t?.text ?? "").slice(0, 8000) })) : undefined;
+
+    const r = await loadRunner();
+    const runId = `run-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    const ac = new AbortController();
+    const send = (ev) => {
+      if (!event.sender.isDestroyed()) event.sender.send("agents:event", { runId, ev });
+    };
+
+    // Validation errors throw here, before a run id exists; the run itself reports through events.
+    const run = r.runAgent({ id: String(req?.id), cwd: root, prompt, mode: req?.mode === "edit" ? "edit" : "read", model: req?.model ? String(req.model) : undefined, sessionId: req?.sessionId ? String(req.sessionId) : undefined, history, signal: ac.signal, onEvent: send });
+    runs.set(runId, ac);
+    event.sender.once("destroyed", () => ac.abort());
+    run
+      .catch((e) => send({ type: "done", ok: false, cancelled: false, error: e.message }))
+      .finally(() => runs.delete(runId));
+    return { runId };
+  });
+
+  ipcMain.handle("agents:cancel", (_e, runId) => {
+    runs.get(String(runId))?.abort();
+  });
 }
+
+let runner; // Promise<module>, loaded once
+const loadRunner = () => (runner ??= import(pathToFileURL(path.join(bundledCli(), "agent-runner.mjs")).href));
 
 module.exports = { registerAgentsIpc };

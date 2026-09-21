@@ -36,6 +36,8 @@ export interface LiveInput {
   secondary: Finding[];
   scan: Scan;
   profile: "full" | "scan-only";
+  /** The app carries the remediation out for real: the plan ends once the fixes are ranked. */
+  handoff?: boolean;
 }
 
 const now = () => {
@@ -49,7 +51,9 @@ const countBy = (findings: Finding[]) => {
   return c;
 };
 
-function environmentFor(scan: Scan): TargetEnvironment {
+function environmentFor(scan: Scan, handoff = false): TargetEnvironment {
+  // A hand-off run names what it is: the scan reads source and executes nothing, so there is no sandbox to name.
+  if (handoff) return { isolated: true, disposable: false, host: "static analysis · nothing is executed", network: "none", sandboxId: "none" };
   return { isolated: true, disposable: true, host: "static analysis (local)", network: "none", sandboxId: sandboxId(scan) };
 }
 
@@ -62,7 +66,7 @@ function workspacesFor(top: Finding): Workspace[] {
 /** The state the live run starts from. Findings are complete; beats animate status. */
 export function liveInitialState(input: LiveInput): ArcadeState {
   const { project, surface, top, secondary, scan } = input;
-  const env = environmentFor(scan);
+  const env = environmentFor(scan, input.handoff);
   return {
     project,
     environment: env,
@@ -75,7 +79,7 @@ export function liveInitialState(input: LiveInput): ArcadeState {
     approvals: [],
     timeline: [],
     terminal: [
-      { agent: "system", kind: "plain", text: `arcade v0.1.0 · ${env.sandboxId} · read-only static analysis, network: none` },
+      { agent: "system", kind: "plain", text: input.handoff ? "arcade · static analysis of your source · nothing is executed during the scan" : `arcade v0.1.0 · ${env.sandboxId} · read-only static analysis, network: none` },
       { agent: "system", kind: "plain", text: `Imported ${project.name} — ${scan.paths.length} files indexed, ${scan.filesScanned} analysed` },
     ],
     phase: "idle",
@@ -113,9 +117,15 @@ export function buildLivePlan(input: LiveInput): RunPlan {
 
   // ---- Attack --------------------------------------------------------------
   phase("attacking");
-  agent("attacker", { status: "running", task: "Reproducing weaknesses in the sandbox", progress: 0.1 }, 120);
-  term({ agent: "attacker", kind: "cmd", text: `arcade attack --sandbox ${environmentFor(scan).sandboxId} --static` });
-  term({ agent: "attacker", kind: "info", text: "Spawned isolated sandbox · network: none · read-only" });
+  const handoff = !!input.handoff;
+  agent("attacker", { status: "running", task: handoff ? "Matching the rule set against the source" : "Reproducing weaknesses in the sandbox", progress: 0.1 }, 120);
+  if (handoff) {
+    term({ agent: "attacker", kind: "cmd", text: `arcade scan ${project.repo}` });
+    term({ agent: "attacker", kind: "info", text: `Analysed ${scan.filesScanned} files statically · no code was executed${scan.truncated ? " · stopped at the hit limit" : ""}` });
+  } else {
+    term({ agent: "attacker", kind: "cmd", text: `arcade attack --sandbox ${environmentFor(scan).sandboxId} --static` });
+    term({ agent: "attacker", kind: "info", text: "Spawned isolated sandbox · network: none · read-only" });
+  }
   const shown = findings.slice(0, 6);
   shown.forEach((f, i) => {
     term({ agent: "attacker", kind: f.severity === "critical" || f.severity === "high" ? "warn" : "sub", text: `${f.severity.toUpperCase()}  ${f.title} · ${f.vulnerableCode.path}:${f.vulnerableCode.lines.find((l) => l.flagged)?.no ?? "?"}` });
@@ -124,7 +134,7 @@ export function buildLivePlan(input: LiveInput): RunPlan {
   if (findings.length > shown.length) term({ agent: "attacker", kind: "plain", text: `…and ${findings.length - shown.length} more` });
   finding({ status: "reproduced" });
   term({ agent: "attacker", kind: findings.length ? "err" : "ok", text: findings.length ? `${findings.length} findings · ${counts.critical} critical, ${counts.high} high, ${counts.medium} medium, ${counts.low} low` : "No weaknesses matched the rule set" });
-  time({ time: now(), actor: "Attacker", kind: "attack", text: `Reproduced ${findings.length} findings across ${new Set(findings.map((f) => f.vulnerableCode.path)).size} files` });
+  time({ time: now(), actor: "Attacker", kind: "attack", text: `${handoff ? "Found" : "Reproduced"} ${findings.length} findings across ${new Set(findings.map((f) => f.vulnerableCode.path)).size} files` });
   time({ time: now(), actor: "Attacker", kind: "evidence", text: `Top finding: ${top.id} ${top.title} (${top.cwe.split("·")[0].trim()})` });
   agent("attacker", { status: "done", task: `${findings.length} findings · evidence saved`, progress: 1 });
   phase("attacked");
@@ -144,6 +154,10 @@ export function buildLivePlan(input: LiveInput): RunPlan {
   time({ time: now(), actor: "Defender", kind: "defend", text: `Root cause traced for ${top.id}; ${top.mitigations.length} mitigations proposed` });
   agent("defender", { status: "done", task: `${top.mitigations.length} mitigations proposed`, progress: 1 });
   phase("defended");
+
+  // From here on the work is real — a branch, an edit, the project's tests, a commit — so the
+  // app carries it out and reports what happened instead of this plan scripting it.
+  if (handoff) return { beats, initial: liveInitialState(input) };
 
   // ---- Approval gate #1 ----------------------------------------------------
   finding({ status: "awaiting-approval" });

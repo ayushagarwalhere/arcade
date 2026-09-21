@@ -16,8 +16,13 @@ import {
   Network,
   Plug,
   Search,
+  Settings,
   ShieldAlert,
 } from "lucide-react";
+import type { RunnableAgent } from "@arcade/core/desktop";
+import type { Git } from "@/hooks/useGit";
+import ScmPanel from "./ScmPanel";
+import SettingsPanel from "./SettingsPanel";
 import type { ArcadeState, Finding, RemediationFile } from "@arcade/core/types";
 import type { WorkspaceFs } from "@arcade/core/fs";
 import type { AgentConnection } from "@arcade/core/agent-connections";
@@ -29,7 +34,7 @@ import { SITE } from "@arcade/ui/lib/site";
 
 export type View = "overview" | "surface" | "findings" | "evidence" | "timeline" | "browser" | "diff";
 
-export type Activity = "explorer" | "search" | "findings" | "scm" | "providers";
+export type Activity = "explorer" | "search" | "findings" | "scm" | "providers" | "settings";
 
 /** The open workspace's files: null while resolving, "none" when they can't be read here. */
 export interface WorkspaceFiles {
@@ -40,6 +45,11 @@ export interface WorkspaceFiles {
   activePath: string | null;
   decorations: Record<string, FileDecoration>;
   onOpenFile: (path: string, opts?: { preview?: boolean; line?: number }) => void;
+  /** Bumped when files changed on disk outside the tree. */
+  refreshKey: number;
+  /** The explorer created, renamed or deleted something. */
+  onChanged: () => void;
+  onRemoved: (path: string) => void;
 }
 
 export const VIEW_META: Record<View, { label: string; Icon: typeof LayoutDashboard }> = {
@@ -59,7 +69,8 @@ const ACTIVITIES: { id: Activity; label: string; Icon: typeof LayoutDashboard }[
   { id: "search", label: "Search", Icon: Search },
   { id: "findings", label: "Findings", Icon: ShieldAlert },
   { id: "scm", label: "Source Control", Icon: GitBranch },
-  { id: "providers", label: "Agent Providers", Icon: Plug },
+  { id: "providers", label: "Agents", Icon: Plug },
+  { id: "settings", label: "Settings", Icon: Settings },
 ];
 
 /* ------------------------------------------------------------ activity bar */
@@ -88,7 +99,8 @@ export function ActivityBar({
             title={label}
             aria-label={label}
             onClick={() => onActivity(id)}
-            className={`relative grid h-10 w-full place-items-center transition ${active ? "text-white" : "text-ade-faint hover:text-ade-fg"}`}
+            // Settings sits at the foot of the bar, where an editor keeps it.
+            className={`relative grid h-10 w-full place-items-center transition ${id === "settings" ? "mt-auto" : ""} ${active ? "text-white" : "text-ade-faint hover:text-ade-fg"}`}
           >
             {active && <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-r bg-white" />}
             <Icon className="h-[18px] w-[18px]" strokeWidth={1.6} />
@@ -104,7 +116,7 @@ export function ActivityBar({
         href={SITE.home}
         title="Back to arcade.dev"
         aria-label="Back to arcade.dev"
-        className="mt-auto grid h-10 w-full place-items-center text-ade-faint transition hover:text-ade-fg"
+        className="grid h-10 w-full place-items-center text-ade-faint transition hover:text-ade-fg"
       >
         <House className="h-[18px] w-[18px]" strokeWidth={1.6} />
       </a>
@@ -198,9 +210,23 @@ export default function Sidebar({
   onOpenFinding,
   changes,
   files,
-  onToggleProvider,
   agents,
+  live,
+  sample,
+  git,
+  runnable,
+  onOpenDiff,
+  onGitChanged,
 }: {
+  /** A real project has been assessed (as opposed to the bundled sample playing). */
+  live: boolean;
+  /** The bundled sample project is open, rather than a folder or repository of the user's. */
+  sample: boolean;
+  git: Git;
+  /** Agent CLIs found on this machine; null in a browser. */
+  runnable: RunnableAgent[] | null;
+  onOpenDiff: (path: string, staged: boolean) => void;
+  onGitChanged: () => void;
   files: WorkspaceFiles;
   state: ArcadeState;
   activity: Activity;
@@ -212,7 +238,6 @@ export default function Sidebar({
   selectedFinding: string;
   onOpenFinding: (id: string) => void;
   changes: RemediationFile[];
-  onToggleProvider: (id: string, connected: boolean) => void;
   agents: AgentConnections;
 }) {
   const title = ACTIVITIES.find((a) => a.id === activity)!.label;
@@ -225,7 +250,7 @@ export default function Sidebar({
         {activity === "explorer" && (
           <>
             {files.fs && files.fs !== "none" ? (
-              <FileTree fs={files.fs} title={state.project.name} activePath={files.activePath} decorations={files.decorations} onOpen={files.onOpenFile} />
+              <FileTree fs={files.fs} title={state.project.name} activePath={files.activePath} decorations={files.decorations} refreshKey={files.refreshKey} onOpen={files.onOpenFile} onChanged={files.onChanged} onRemoved={files.onRemoved} />
             ) : (
               <Section title={state.project.name}>
                 <p className="px-5 text-[12px] leading-5 text-ade-faint">
@@ -234,22 +259,26 @@ export default function Sidebar({
               </Section>
             )}
 
-            <Section title="Security runs">
-              {state.workspaces.map((w) => (
-                <button key={w.id} onClick={() => onWorkspace(w.id)} className={`${ROW} ${rowTone(activeWorkspace === w.id)}`}>
-                  <span
-                    className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                      w.status === "active" ? "bg-emerald-400" : w.status === "queued" ? "bg-white/25" : "bg-violet-400"
-                    }`}
-                  />
-                  <span className="truncate">{w.name}</span>
-                  <span className="min-w-0 flex-1 truncate text-right font-mono text-[10.5px] text-ade-faint">{w.status}</span>
-                </button>
-              ))}
-            </Section>
+            {/* The sample ships a list of queued runs to show the idea; a real project has the one run you started. */}
+            {!live && (
+              <Section title="Security runs · sample">
+                {state.workspaces.map((w) => (
+                  <button key={w.id} onClick={() => onWorkspace(w.id)} className={`${ROW} ${rowTone(activeWorkspace === w.id)}`}>
+                    <span
+                      className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                        w.status === "active" ? "bg-emerald-400" : w.status === "queued" ? "bg-white/25" : "bg-violet-400"
+                      }`}
+                    />
+                    <span className="truncate">{w.name}</span>
+                    <span className="min-w-0 flex-1 truncate text-right font-mono text-[10.5px] text-ade-faint">{w.status}</span>
+                  </button>
+                ))}
+              </Section>
+            )}
 
             <Section title="Run artifacts">
-              {ARTIFACTS.map((id) => {
+              {/* The Browser view is a mock storefront that belongs to the sample project only. */}
+              {ARTIFACTS.filter((id) => id !== "browser" || sample).map((id) => {
                 const { label, Icon } = VIEW_META[id];
                 return (
                   <button key={id} onClick={() => onView(id)} className={`${ROW} ${rowTone(view === id)}`}>
@@ -260,14 +289,22 @@ export default function Sidebar({
               })}
             </Section>
 
-            <Section title="Target environment">
+            <Section title={live ? "How this was analysed" : "Target environment · sample"}>
               <dl className="space-y-1 pl-5 pr-3 pt-0.5 text-[12px]">
-                {[
-                  ["sandbox", state.environment.sandboxId],
-                  ["host", state.environment.host],
-                  ["network", state.environment.network],
-                  ["isolation", state.environment.isolated ? "isolated · disposable" : "shared"],
-                ].map(([k, v]) => (
+                {(live
+                  ? [
+                      ["method", "static analysis"],
+                      ["executes code", "no"],
+                      ["network", "none"],
+                      ["fixes run", git.available ? "on a branch, with your tests" : "desktop app only"],
+                    ]
+                  : [
+                      ["sandbox", state.environment.sandboxId],
+                      ["host", state.environment.host],
+                      ["network", state.environment.network],
+                      ["isolation", state.environment.isolated ? "isolated · disposable" : "shared"],
+                    ]
+                ).map(([k, v]) => (
                   <div key={k} className="flex justify-between gap-3">
                     <dt className="text-ade-faint">{k}</dt>
                     <dd className="truncate font-mono text-[11.5px] text-ade-fg/80">{v}</dd>
@@ -289,6 +326,7 @@ export default function Sidebar({
 
         {activity === "findings" && (
           <Section title={`Open findings · ${findings.length}`}>
+            {findings.length === 0 && <p className="px-5 text-[12px] leading-5 text-ade-faint">{live ? "No weaknesses matched the rule set. That isn't proof of security, only that none of the current rules fired." : "Nothing yet. Assess the project (Run, top right) to find what is weak."}</p>}
             {findings.map((f) => (
               <button
                 key={f.id}
@@ -304,7 +342,10 @@ export default function Sidebar({
           </Section>
         )}
 
-        {activity === "scm" && (
+        {activity === "scm" && git.available && <ScmPanel git={git} onOpenDiff={onOpenDiff} onChanged={onGitChanged} />}
+
+        {/* No local git to run (a browser, the sample, a repository read from GitHub): show the fix the run proposes. */}
+        {activity === "scm" && !git.available && (
           <>
             <div className="px-3 pb-3">
               <div className="flex items-center gap-1.5 font-mono text-[11.5px] text-ade-muted">
@@ -325,28 +366,53 @@ export default function Sidebar({
         )}
 
         {activity === "providers" && (
-          <Section title="Bring your own agent">
-            {state.providers.map((p) => {
-              const agent = agents.list?.find((a) => a.id === p.id);
-              if (agent) return <AgentRow key={p.id} agent={agent} busy={agents.busy === p.id} onChange={agents.setConnected} />;
-              return (
-                <label key={p.id} className={`${ROW} cursor-pointer ${rowTone(false)}`}>
-                  <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${p.connected ? "bg-emerald-400" : "bg-white/20"}`} />
-                  <span className="flex-1 truncate">{p.name}</span>
-                  <input type="checkbox" checked={p.connected} onChange={(e) => onToggleProvider(p.id, e.target.checked)} className="sr-only" />
-                  <span className={`text-[11px] ${p.connected ? "text-emerald-300/90" : "text-ade-faint"}`}>{p.connected ? "connected" : "connect"}</span>
-                </label>
-              );
-            })}
-            {agents.error && <p className="px-5 pt-2 text-[12px] leading-5 text-red-300/90">{agents.error}</p>}
-            <p className="px-5 pt-2 text-[12px] leading-5 text-ade-faint">Arcade drives whichever coding agent you already use. Connected providers can be assigned to any role in the fleet.</p>
-            <p className="px-5 pt-2 text-[12px] leading-5 text-ade-faint">
-              {agents.list
-                ? "Connecting Claude Code or Codex adds Arcade's MCP server to the agent's own config, so it can start scans and read findings back. Restart the agent to pick it up."
-                : "The desktop app connects Claude Code and Codex for real. From a terminal, run arcade connect."}
-            </p>
-          </Section>
+          <>
+            {/* Direction one: Arcade runs the agent. Found by looking for its CLI on this machine, nothing is assumed. */}
+            <Section title="Agents Arcade can run">
+              {runnable ? (
+                runnable.map((a) =>
+                  a.runnable ? (
+                    <div key={a.id} title={a.binary ?? ""} className={`${ROW} ${rowTone(false)}`}>
+                      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400" />
+                      <span className="flex-1 truncate">{a.name}</span>
+                      <span className="text-[11px] text-emerald-300/90">ready</span>
+                    </div>
+                  ) : (
+                    <a key={a.id} href={a.install} target="_blank" rel="noreferrer" title={`${a.name}'s command-line tool wasn't found on this machine`} className={`${ROW} ${rowTone(false)}`}>
+                      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-white/20" />
+                      <span className="flex-1 truncate">{a.name}</span>
+                      <span className="text-[11px] text-ade-faint">install</span>
+                    </a>
+                  ),
+                )
+              ) : (
+                <p className="px-5 text-[12px] leading-5 text-ade-faint">Agents are programs on your computer, so a web page can&apos;t see or start them. The desktop app lists the ones you have here.</p>
+              )}
+              {runnable && (
+                <p className="px-5 pt-2 text-[12px] leading-5 text-ade-faint">
+                  A ready agent answers in the Agent pane (Ctrl+L) and writes the fixes the security loop can&apos;t write itself. It runs as you, with your sign-in and your plan. Pick the default in Settings.
+                </p>
+              )}
+            </Section>
+
+            {/* Direction two: the agent calls Arcade, through the MCP server registered in its own config. */}
+            <Section title="Agents that can call Arcade">
+              {agents.list ? (
+                agents.list.map((agent) => <AgentRow key={agent.id} agent={agent} busy={agents.busy === agent.id} onChange={agents.setConnected} />)
+              ) : (
+                <p className="px-5 text-[12px] leading-5 text-ade-faint">
+                  In the desktop app, or from a terminal with <span className="font-mono">arcade connect</span>.
+                </p>
+              )}
+              {agents.error && <p className="px-5 pt-2 text-[12px] leading-5 text-red-300/90">{agents.error}</p>}
+              {agents.list && (
+                <p className="px-5 pt-2 text-[12px] leading-5 text-ade-faint">Connecting adds Arcade&apos;s MCP server to the agent&apos;s own config, so it can scan a project and read the findings back while you work in it. Restart the agent to pick it up.</p>
+              )}
+            </Section>
+          </>
         )}
+
+        {activity === "settings" && <SettingsPanel agents={runnable} />}
       </div>
     </div>
   );

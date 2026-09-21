@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronRight, CopyMinus, File, FileCode, FileImage, FileJson, FileLock, FileTerminal, FileText, Folder, FolderOpen, RotateCw, Settings } from "lucide-react";
+import { ChevronDown, ChevronRight, CopyMinus, File, FileCode, FileImage, FileJson, FileLock, FilePlus, FileTerminal, FileText, Folder, FolderOpen, FolderPlus, RotateCw, Settings } from "lucide-react";
 import { HEAVY_DIRS, baseName, dirName, extOf, isImagePath, type FsEntry, type WorkspaceFs } from "@arcade/core/fs";
 
 export interface FileDecoration {
@@ -57,18 +57,89 @@ export default function FileTree({
   title,
   activePath,
   decorations,
+  refreshKey = 0,
   onOpen,
+  onChanged,
+  onRemoved,
 }: {
   fs: WorkspaceFs;
   title: string;
   activePath: string | null;
   decorations: Record<string, FileDecoration>;
+  /** Bumped when files changed outside the tree (an agent, git, a save). */
+  refreshKey?: number;
   onOpen: (path: string, opts: { preview: boolean }) => void;
+  /** The tree created, renamed or deleted something. */
+  onChanged?: () => void;
+  /** This path is gone (deleted, or renamed away): anything showing it should close. */
+  onRemoved?: (path: string) => void;
 }) {
   const [open, setOpen] = useState(true);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [nodes, setNodes] = useState<Record<string, Loaded>>({});
-  const [version, setVersion] = useState(0);
+  const [localVersion, setVersion] = useState(0);
+  const version = localVersion + refreshKey;
+
+  // Editing the tree. `draft` is the inline name box: a new entry inside `dir`, or a rename of `from`.
+  const [draft, setDraft] = useState<{ dir: string; kind: "file" | "dir"; from?: string; name: string } | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; entry: FsEntry | null } | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+  const write = fs.write;
+
+  const startCreate = (kind: "file" | "dir", dir: string) => {
+    setMenu(null);
+    setProblem(null);
+    if (dir) setExpanded((prev) => new Set([...prev, dir, ...ancestors(`${dir}/x`)]));
+    setDraft({ dir, kind, name: "" });
+  };
+
+  const commitDraft = async () => {
+    if (!draft || !write) return setDraft(null);
+    const name = draft.name.trim();
+    if (!name || name === (draft.from ? baseName(draft.from) : "")) return setDraft(null);
+    const target = draft.dir ? `${draft.dir}/${name}` : name;
+    try {
+      if (draft.from) {
+        if (!write.rename) throw new Error("Renaming isn't available for this folder");
+        await write.rename(draft.from, target);
+        onRemoved?.(draft.from);
+      } else {
+        await write.create(target, draft.kind);
+      }
+      setDraft(null);
+      setVersion((v) => v + 1);
+      onChanged?.();
+      if (draft.kind === "file") onOpen(target, { preview: false });
+    } catch (e) {
+      setProblem((e instanceof Error ? e.message : String(e)).replace(/^Error invoking remote method '[^']+': (\w*Error: )?/, ""));
+    }
+  };
+
+  const remove = async (entry: FsEntry) => {
+    setMenu(null);
+    if (!write) return;
+    // The desktop app moves it to the trash; a browser folder has no trash, so ask first there.
+    if (!write.reveal && !window.confirm(`Delete ${entry.name}? This can't be undone.`)) return;
+    try {
+      await write.remove(entry.path);
+      onRemoved?.(entry.path);
+      setVersion((v) => v + 1);
+      onChanged?.();
+    } catch (e) {
+      setProblem((e instanceof Error ? e.message : String(e)).replace(/^Error invoking remote method '[^']+': (\w*Error: )?/, ""));
+    }
+  };
+
+  useEffect(() => {
+    if (!menu) return;
+    const close = () => setMenu(null);
+    window.addEventListener("pointerdown", close);
+    window.addEventListener("blur", close);
+    return () => {
+      window.removeEventListener("pointerdown", close);
+      window.removeEventListener("blur", close);
+    };
+  }, [menu]);
   const container = useRef<HTMLDivElement>(null);
   const inflight = useRef(new Set<string>());
   const pendingReveal = useRef<string | null>(null);
@@ -124,8 +195,10 @@ export default function FileTree({
       return next;
     });
 
-  const rows: { entry: FsEntry; depth: number }[] = [];
+  const rows: { entry: FsEntry | null; depth: number }[] = [];
   const walk = (dir: string, depth: number) => {
+    // A new entry's name box sits at the top of the folder it will be created in.
+    if (draft && !draft.from && draft.dir === dir) rows.push({ entry: null, depth });
     for (const entry of nodes[dir]?.entries ?? []) {
       rows.push({ entry, depth });
       if (entry.kind === "dir" && expanded.has(entry.path)) walk(entry.path, depth + 1);
@@ -143,6 +216,16 @@ export default function FileTree({
         </button>
         {open && (
           <span className="flex opacity-0 transition group-focus-within:opacity-100 group-hover:opacity-100">
+            {write && (
+              <>
+                <button onClick={() => startCreate("file", "")} title="New file" aria-label="New file" className="grid h-5 w-5 place-items-center rounded text-ade-muted hover:bg-white/10 hover:text-ade-fg">
+                  <FilePlus className="h-3 w-3" />
+                </button>
+                <button onClick={() => startCreate("dir", "")} title="New folder" aria-label="New folder" className="grid h-5 w-5 place-items-center rounded text-ade-muted hover:bg-white/10 hover:text-ade-fg">
+                  <FolderPlus className="h-3 w-3" />
+                </button>
+              </>
+            )}
             <button onClick={() => setVersion((v) => v + 1)} title="Refresh explorer" aria-label="Refresh explorer" className="grid h-5 w-5 place-items-center rounded text-ade-muted hover:bg-white/10 hover:text-ade-fg">
               <RotateCw className="h-3 w-3" />
             </button>
@@ -154,8 +237,52 @@ export default function FileTree({
       </div>
 
       {open && (
-        <div ref={container} role="tree" className="pb-2">
-          {rows.map(({ entry, depth }) => {
+        <div
+          ref={container}
+          role="tree"
+          className="pb-2"
+          onContextMenu={(e) => {
+            if (!write) return;
+            e.preventDefault();
+            setMenu({ x: e.clientX, y: e.clientY, entry: null });
+          }}
+        >
+          {problem && (
+            <p className="mx-2 mb-1 rounded border border-red-500/30 bg-red-500/[0.07] px-2 py-1 text-[11.5px] leading-[1.45] text-red-200">
+              {problem}
+              <button onClick={() => setProblem(null)} className="ml-2 underline opacity-80 hover:opacity-100">
+                dismiss
+              </button>
+            </p>
+          )}
+          {rows.map(({ entry, depth }, index) => {
+            if (!entry || draft?.from === entry.path) {
+              const kind = draft!.kind;
+              return (
+                <div key={`draft:${index}`} style={{ paddingLeft: 6 + depth * INDENT }} className="flex h-[22px] items-center gap-1 pr-2">
+                  <span className="w-3.5 shrink-0" />
+                  {kind === "dir" ? <Folder className="h-3.5 w-3.5 shrink-0 text-ade-muted" strokeWidth={1.7} /> : <FileIcon path={draft!.name || "x"} />}
+                  <input
+                    autoFocus
+                    value={draft!.name}
+                    onChange={(e) => setDraft((d) => d && { ...d, name: e.target.value })}
+                    onFocus={(e) => {
+                      // Renaming selects the name, not the extension — what you almost always want to change.
+                      const dot = e.target.value.lastIndexOf(".");
+                      e.target.setSelectionRange(0, dot > 0 ? dot : e.target.value.length);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") void commitDraft();
+                      else if (e.key === "Escape") setDraft(null);
+                    }}
+                    onBlur={() => void commitDraft()}
+                    spellCheck={false}
+                    aria-label={draft!.from ? "New name" : kind === "dir" ? "Folder name" : "File name"}
+                    className="h-[18px] min-w-0 flex-1 rounded-sm border border-white/30 bg-ade-editor px-1 text-[13px] text-ade-fg outline-none"
+                  />
+                </div>
+              );
+            }
             const isDir = entry.kind === "dir";
             const isOpen = isDir && expanded.has(entry.path);
             const active = entry.path === activePath;
@@ -173,6 +300,17 @@ export default function FileTree({
                 title={deco?.title ?? entry.path}
                 onClick={() => (isDir ? toggle(entry.path) : onOpen(entry.path, { preview: true }))}
                 onDoubleClick={() => !isDir && onOpen(entry.path, { preview: false })}
+                onContextMenu={(e) => {
+                  if (!write) return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setMenu({ x: e.clientX, y: e.clientY, entry });
+                }}
+                onKeyDown={(e) => {
+                  if (!write) return;
+                  if (e.key === "F2" && write.rename) setDraft({ dir: dirName(entry.path), kind: entry.kind, from: entry.path, name: entry.name });
+                  else if (e.key === "Delete") void remove(entry);
+                }}
                 style={{ paddingLeft: 6 + depth * INDENT }}
                 className={`relative flex h-[22px] w-full items-center gap-1 pr-2 text-left text-[13px] transition-colors ${
                   active ? "bg-white/[0.09] text-white" : "text-ade-fg/80 hover:bg-white/[0.045] hover:text-ade-fg"
@@ -201,7 +339,74 @@ export default function FileTree({
 
           {!root && <p className="px-5 py-1 text-[12px] text-ade-faint">Loading…</p>}
           {root && root.entries === null && <p className="px-5 py-1 text-[12px] leading-5 text-amber-200/80">This folder couldn&apos;t be read.</p>}
-          {root?.entries?.length === 0 && <p className="px-5 py-1 text-[12px] text-ade-faint">This folder is empty.</p>}
+          {root?.entries?.length === 0 && !draft && <p className="px-5 py-1 text-[12px] text-ade-faint">This folder is empty.</p>}
+        </div>
+      )}
+
+      {menu && write && (
+        <div
+          role="menu"
+          onPointerDown={(e) => e.stopPropagation()}
+          style={{ left: Math.min(menu.x, window.innerWidth - 200), top: Math.min(menu.y, window.innerHeight - 190) }}
+          className="fixed z-50 w-[190px] rounded-md border border-ade-line bg-ade-raised p-1 text-[12.5px] text-ade-fg/90 shadow-[var(--pop-shadow)]"
+        >
+          {(() => {
+            const e = menu.entry;
+            const dir = !e ? "" : e.kind === "dir" ? e.path : dirName(e.path);
+            const item = "flex h-6 w-full items-center justify-between rounded px-2 text-left transition hover:bg-white/[0.08]";
+            return (
+              <>
+                <button role="menuitem" onClick={() => startCreate("file", dir)} className={item}>
+                  New file…
+                </button>
+                <button role="menuitem" onClick={() => startCreate("dir", dir)} className={item}>
+                  New folder…
+                </button>
+                {e && (
+                  <>
+                    <div className="my-1 h-px bg-ade-line" />
+                    {write.rename && (
+                      <button
+                        role="menuitem"
+                        onClick={() => {
+                          setMenu(null);
+                          setDraft({ dir: dirName(e.path), kind: e.kind, from: e.path, name: e.name });
+                        }}
+                        className={item}
+                      >
+                        Rename… <span className="text-[11px] text-ade-faint">F2</span>
+                      </button>
+                    )}
+                    <button role="menuitem" onClick={() => void remove(e)} className={`${item} text-red-300`}>
+                      {write.reveal ? "Move to trash" : "Delete"} <span className="text-[11px] text-ade-faint">Del</span>
+                    </button>
+                    {write.reveal && (
+                      <button
+                        role="menuitem"
+                        onClick={() => {
+                          setMenu(null);
+                          void write.reveal!(e.path);
+                        }}
+                        className={item}
+                      >
+                        Reveal in file manager
+                      </button>
+                    )}
+                    <button
+                      role="menuitem"
+                      onClick={() => {
+                        setMenu(null);
+                        void navigator.clipboard?.writeText(e.path);
+                      }}
+                      className={item}
+                    >
+                      Copy path
+                    </button>
+                  </>
+                )}
+              </>
+            );
+          })()}
         </div>
       )}
     </div>

@@ -48,4 +48,14 @@ function registerGithubIpc() {
   });
 }
 
-module.exports = { registerGithubIpc };
+/** The signed-in account's token, for the main process only (a push). null when not connected. */
+async function githubToken() {
+  try {
+    const s = JSON.parse(safeStorage.decryptString(await fs.promises.readFile(sessionFile())));
+    return typeof s?.token === "string" ? s.token : null;
+  } catch {
+    return null;
+  }
+}
+
+module.exports = { registerGithubIpc, githubToken };

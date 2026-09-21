@@ -34,7 +34,7 @@ export default function AttackSurface({ state }: { state: ArcadeState }) {
             <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-amber-400" /> attention</span>
             <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-red-500" /> vulnerable</span>
           </div>
-          {pathReady && <Badge tone="red">Proven exploit path highlighted</Badge>}
+          {pathReady && <Badge tone="red">{state.finding.evidence.method === "STATIC" ? "Path to the top finding highlighted" : "Proven exploit path highlighted"}</Badge>}
         </div>
 
         <div className="scrollbar-thin overflow-x-auto rounded-md border border-ade-line bg-ade-base bg-grid">
@@ -144,7 +144,8 @@ export default function AttackSurface({ state }: { state: ArcadeState }) {
               </Badge>
             </div>
             <p className="mt-3 text-[12.5px] leading-6 text-white/65">{sel.detail}</p>
-            {sel.id === "admin" && (
+            {/* A sentence about the sample project's one scripted finding; a real map describes itself in `detail`. */}
+            {sel.id === "admin" && state.finding.evidence.method !== "STATIC" && (
               <div className="mt-3 rounded border border-red-500/25 bg-red-500/[0.06] px-3 py-2 text-[11.5px] text-red-200/90">
                 Finding ARC-001 lives here. The proven exploit path runs User → Browser → API → Admin Export → PostgreSQL.
               </div>

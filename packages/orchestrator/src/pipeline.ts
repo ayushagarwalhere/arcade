@@ -24,6 +24,7 @@ import { remediate } from "@arcade/agents/remediator";
 import { verify } from "@arcade/agents/verifier";
 import { LOCAL_PROVIDER, type AssessmentProvider } from "@arcade/agents/provider";
 import { buildLivePlan, type LiveInput } from "./live-engine";
+import { proposeFix } from "./proposal";
 import type { RunPlan } from "@arcade/core/engine";
 
 export interface AssessmentOptions {
@@ -32,6 +33,12 @@ export interface AssessmentOptions {
   projectName: string;
   projectPath: string;
   provider?: AssessmentProvider;
+  /**
+   * The caller will carry the remediation out for real (branch, edit, tests, re-check,
+   * commit). The assessment then stops at the ranked fixes and pre-fills no results:
+   * the plan ends after "defended" and the finding carries only an honest proposal.
+   */
+  handoff?: boolean;
 }
 
 export type Stage = "scanning" | "mapping" | "reproducing" | "analyzing" | "remediating" | "verifying" | "planning" | "done";
@@ -120,7 +127,10 @@ export async function runAssessment(
     const explained = await Promise.all(findings.map((f) => defend(f, scan.sources[f.vulnerableCode.path] ?? "", provider)));
     findings = explained;
 
-    if (opts.profile === "full") {
+    if (opts.profile === "full" && opts.handoff) {
+      report("remediating", "Preparing the fix proposal…", scan);
+      findings[0] = proposeFix(findings[0], scan.sources[findings[0].vulnerableCode.path]);
+    } else if (opts.profile === "full") {
       report("remediating", "Writing the fix and a regression test…", scan);
       const top = await remediate(findings[0], scan.sources[findings[0].vulnerableCode.path], provider);
       report("verifying", "Independently verifying the fix…", scan);
@@ -140,6 +150,7 @@ export async function runAssessment(
     secondary: findings.slice(1),
     scan,
     profile: findings.length ? opts.profile : "scan-only",
+    handoff: !!opts.handoff,
   };
   const plan = buildLivePlan(input);
 

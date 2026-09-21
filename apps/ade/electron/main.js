@@ -10,8 +10,10 @@ const path = require("path");
 const fs = require("fs");
 const { registerWorkspaceIpc, isAllowedRoot } = require("./workspace-ipc");
 const { registerSandboxIpc } = require("./sandbox-ipc");
-const { registerGithubIpc } = require("./github-ipc");
+const { registerGithubIpc, githubToken } = require("./github-ipc");
 const { registerAgentsIpc } = require("./agents-ipc");
+const { registerGitIpc } = require("./git-ipc");
+const { registerTerminalIpc } = require("./terminal-ipc");
 
 const isDev = !app.isPackaged && !process.env.ELECTRON_PROD;
 const OUT = path.join(__dirname, "..", "out");
@@ -107,7 +109,9 @@ app.whenReady().then(() => {
   Menu.setApplicationMenu(null);
   registerWorkspaceIpc();
   registerGithubIpc();
-  registerAgentsIpc();
+  registerAgentsIpc({ isAllowedRoot });
+  registerGitIpc({ isAllowedRoot, githubToken });
+  registerTerminalIpc({ isAllowedRoot });
   registerSandboxIpc({ isAllowedRoot });
 
   if (!isDev) {

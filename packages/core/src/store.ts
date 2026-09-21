@@ -38,6 +38,9 @@ type Action =
   | { type: "REQUEST_DESTRUCTIVE" }
   | { type: "SET_PROVIDER"; id: string; connected: boolean };
 
+/** Omit that keeps a union a union. */
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
+
 function demoState(): RunState {
   return { s: freshState(), cursor: 0, running: false, beats: buildBeats(), initial: freshState(), live: false };
 }
@@ -172,6 +175,11 @@ export function useArcadeRun() {
 
   /** Write a real line into the terminal — output from something that actually ran, not a scripted beat. */
   const appendTerminal = useCallback((line: TerminalLine) => dispatch({ type: "APPLY", beat: { t: "term", line, delay: 0 } }), []);
+  /**
+   * Apply one state change immediately. This is how a real driver (a git commit, an agent
+   * turn, a test run) reports what actually happened, using the same vocabulary the demo plays.
+   */
+  const apply = useCallback((beat: DistributiveOmit<Beat, "delay">) => dispatch({ type: "APPLY", beat: { ...beat, delay: 0 } as Beat }), []);
 
   const pendingApproval = state.s.approvals.find((a) => a.status === "pending");
   const progress = Math.min(1, state.cursor / Math.max(1, beats.length));
@@ -196,6 +204,7 @@ export function useArcadeRun() {
     setProvider,
     dismissApproval,
     appendTerminal,
+    apply,
   };
 }
 

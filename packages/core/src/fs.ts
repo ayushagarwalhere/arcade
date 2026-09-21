@@ -1,10 +1,14 @@
 /**
- * Read-only view of a workspace's files.
+ * A workspace's files.
  *
  * One interface, three backends: the desktop shell (IPC, see
  * electron/workspace-ipc.js), a browser directory handle (File System Access
  * API), and an in-memory tree for the bundled sample. Paths are relative to the
  * workspace root and always "/"-separated; "" is the root.
+ *
+ * Reading is universal. Writing is optional: a backend that can change files
+ * carries a `write` half (the desktop app, and a browser folder once the user
+ * grants read-write access); a GitHub repository read over the API does not.
  */
 
 export interface FsEntry {
@@ -22,6 +26,20 @@ export type FileContent =
 export interface WorkspaceFs {
   list(dir: string): Promise<FsEntry[]>;
   read(file: string): Promise<FileContent>;
+  /** Present when this backend can change files. */
+  write?: WorkspaceWriter;
+}
+
+export interface WorkspaceWriter {
+  /** Save text, creating the file (and its folders) when needed. */
+  save(file: string, text: string): Promise<void>;
+  /** A new, empty file or folder. Fails if something is already there. */
+  create(path: string, kind: "file" | "dir"): Promise<void>;
+  rename?(from: string, to: string): Promise<void>;
+  /** The desktop app sends it to the OS trash; a browser folder deletes it. */
+  remove(path: string): Promise<void>;
+  /** Show it in the OS file manager (desktop only). */
+  reveal?(path: string): Promise<void>;
 }
 
 export const MAX_TEXT_BYTES = 1.5 * 1024 * 1024;
@@ -55,13 +73,35 @@ function arrange(dir: string, raw: { name: string; kind: "file" | "dir" }[]): Fs
 export interface DesktopFsBridge {
   listDir(root: string, rel: string): Promise<{ name: string; kind: "file" | "dir" }[]>;
   readFile(root: string, rel: string): Promise<FileContent>;
+  // Older desktop builds only read; the write half is there when all of these are.
+  writeFile?(root: string, rel: string, text: string): Promise<unknown>;
+  createEntry?(root: string, rel: string, kind: "file" | "dir"): Promise<void>;
+  renameEntry?(root: string, from: string, to: string): Promise<void>;
+  trashEntry?(root: string, rel: string): Promise<void>;
+  revealEntry?(root: string, rel: string): Promise<void>;
 }
 
 export function desktopFs(bridge: DesktopFsBridge, root: string): WorkspaceFs {
+  const { writeFile, createEntry, renameEntry, trashEntry, revealEntry } = bridge;
   return {
     list: async (dir) => arrange(dir, await bridge.listDir(root, dir)),
     read: (file) => bridge.readFile(root, file),
+    write:
+      writeFile && createEntry && trashEntry
+        ? {
+            save: async (file, text) => void (await writeFile(root, file, text)),
+            create: (path, kind) => createEntry(root, path, kind),
+            rename: renameEntry && ((from, to) => renameEntry(root, from, to)),
+            remove: (path) => trashEntry(root, path),
+            reveal: revealEntry && ((path) => revealEntry(root, path)),
+          }
+        : undefined,
   };
+}
+
+interface WritableFile {
+  write(data: string): Promise<void>;
+  close(): Promise<void>;
 }
 
 export interface DirHandle {
@@ -69,18 +109,57 @@ export interface DirHandle {
   name: string;
   values(): AsyncIterable<{ kind: "file" | "directory"; name: string }>;
   getDirectoryHandle(name: string, options?: { create?: boolean }): Promise<DirHandle>;
-  getFileHandle(name: string): Promise<{ getFile(): Promise<File> }>;
+  getFileHandle(name: string, options?: { create?: boolean }): Promise<{ getFile(): Promise<File>; createWritable?(): Promise<WritableFile> }>;
+  removeEntry?(name: string, options?: { recursive?: boolean }): Promise<void>;
   queryPermission?(d: { mode: "read" | "readwrite" }): Promise<PermissionState>;
   requestPermission?(d: { mode: "read" | "readwrite" }): Promise<PermissionState>;
 }
 
 export function handleFs(root: DirHandle): WorkspaceFs {
-  const dirAt = async (dir: string) => {
+  const dirAt = async (dir: string, create = false) => {
     let h = root;
-    for (const part of dir.split("/").filter(Boolean)) h = await h.getDirectoryHandle(part);
+    for (const part of dir.split("/").filter(Boolean)) h = await h.getDirectoryHandle(part, { create });
     return h;
   };
+  // The folder was opened for reading. The browser asks the user once, on the first
+  // write, whether this page may also change files in it.
+  const writable = async () => {
+    const granted = (await root.queryPermission?.({ mode: "readwrite" })) === "granted" || (await root.requestPermission?.({ mode: "readwrite" })) === "granted";
+    if (!granted) throw new Error("This folder is open read-only. Allow editing when the browser asks, or use the desktop app.");
+  };
+  const exists = async (path: string) => {
+    try {
+      const dir = await dirAt(dirName(path));
+      for await (const e of dir.values()) if (e.name === baseName(path)) return true;
+    } catch {
+      /* the folder isn't there either */
+    }
+    return false;
+  };
   return {
+    write: root.removeEntry
+      ? {
+          async save(file, text) {
+            await writable();
+            const handle = await (await dirAt(dirName(file), true)).getFileHandle(baseName(file), { create: true });
+            if (!handle.createWritable) throw new Error("This browser can't save files. Use the desktop app.");
+            const out = await handle.createWritable();
+            await out.write(text);
+            await out.close();
+          },
+          async create(path, kind) {
+            await writable();
+            if (await exists(path)) throw new Error(`${baseName(path)} already exists`);
+            const dir = await dirAt(dirName(path), true);
+            if (kind === "dir") await dir.getDirectoryHandle(baseName(path), { create: true });
+            else await dir.getFileHandle(baseName(path), { create: true });
+          },
+          async remove(path) {
+            await writable();
+            await (await dirAt(dirName(path))).removeEntry!(baseName(path), { recursive: true });
+          },
+        }
+      : undefined,
     async list(dir) {
       const raw: { name: string; kind: "file" | "dir" }[] = [];
       for await (const e of (await dirAt(dir)).values()) raw.push({ name: e.name, kind: e.kind === "directory" ? "dir" : "file" });

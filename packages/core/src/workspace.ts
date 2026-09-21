@@ -6,6 +6,7 @@
  * API (Chromium only). Nothing here reads file contents.
  */
 import type { AgentsBridge } from "./agent-connections";
+import type { AgentRunBridge, GitBridge, TerminalBridge } from "./desktop";
 import type { GithubBridge } from "./github";
 import { rememberHandle } from "./workspace-fs";
 
@@ -22,7 +23,10 @@ interface DesktopBridge {
   openFolder?: () => Promise<{ name: string; path: string } | null>;
   createFolder?: () => Promise<{ name: string; path: string } | null>;
   github?: GithubBridge;
-  agents?: AgentsBridge;
+  /** MCP registration (connect / disconnect) and running an installed agent's CLI (detect / run / cancel). */
+  agents?: AgentsBridge & Partial<AgentRunBridge>;
+  git?: GitBridge;
+  terminal?: TerminalBridge;
   sandbox?: SandboxBridge;
 }
 

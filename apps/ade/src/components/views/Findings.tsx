@@ -24,6 +24,8 @@ export default function Findings({
 }) {
   const all: Finding[] = [state.finding, ...state.secondaryFindings];
   const finding = all.find((f) => f.id === selectedId) ?? state.finding;
+  // A real project's findings come from static analysis; the wording must not claim an exploit was run.
+  const isStatic = finding.evidence.method === "STATIC";
   const isFlagship = finding.id === state.finding.id;
   const [tab, setTab] = useState<Tab>("Overview");
 
@@ -195,11 +197,11 @@ export default function Findings({
                     <div className="text-[15px] font-semibold text-emerald-300">Verified</div>
                     <div className="text-[12px] text-white/55">{finding.verification.replaySummary}</div>
                   </div>
-                  {finding.verification.independent && <Badge tone="violet" className="ml-auto">Independent verifier</Badge>}
+                  {finding.verification.independent && <Badge tone="violet" className="ml-auto">{isStatic ? "Rule re-run on the patched file" : "Independent verifier"}</Badge>}
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="rounded border border-ade-line bg-ade-raised p-4">
-                    <div className="text-[11px] uppercase tracking-wide text-white/40">Original exploit</div>
+                    <div className="text-[11px] uppercase tracking-wide text-white/40">{isStatic ? "The flagged code" : "Original exploit"}</div>
                     <div className="mt-2 flex items-center gap-3 font-mono text-[15px]">
                       <span className="text-red-300 line-through">{finding.verification.statusBefore}</span>
                       <ArrowRight className="h-4 w-4 text-white/40" />
@@ -207,10 +209,19 @@ export default function Findings({
                     </div>
                   </div>
                   <div className="rounded border border-ade-line bg-ade-raised p-4">
-                    <div className="text-[11px] uppercase tracking-wide text-white/40">Adversarial replay</div>
+                    <div className="text-[11px] uppercase tracking-wide text-white/40">{isStatic ? "Your project's tests" : "Adversarial replay"}</div>
                     <div className="mt-2 text-[13px] text-white/75">
-                      {finding.verification.mutatedSucceeded}/{finding.verification.mutatedPayloads} mutated payloads succeeded ·{" "}
-                      {finding.verification.regressionPassed}/{finding.verification.regressionTotal} tests pass
+                      {isStatic ? (
+                        finding.verification.regressionTotal ? (
+                          `${finding.verification.regressionPassed}/${finding.verification.regressionTotal} test command${finding.verification.regressionTotal === 1 ? "" : "s"} passed`
+                        ) : (
+                          "No tests were run for this fix"
+                        )
+                      ) : (
+                        <>
+                          {finding.verification.mutatedSucceeded}/{finding.verification.mutatedPayloads} mutated payloads succeeded · {finding.verification.regressionPassed}/{finding.verification.regressionTotal} tests pass
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -218,10 +229,10 @@ export default function Findings({
             ) : finding.status === "verification-failed" ? (
               <div className="flex items-center gap-3 rounded-md border border-red-500/25 bg-red-500/[0.06] px-4 py-3.5">
                 <XCircle className="h-6 w-6 text-red-400" />
-                <div className="text-[14px] text-red-200">Verification failed — the original exploit still succeeds. Finding stays open.</div>
+                <div className="text-[14px] text-red-200">{isStatic ? `Not closed — ${finding.verification.replaySummary || "the rule still matches, or the project's tests failed"}. Nothing was committed.` : "Verification failed — the original exploit still succeeds. Finding stays open."}</div>
               </div>
             ) : (
-              <Empty text="Not verified yet. A separate agent re-runs the original attack after the fix." />
+              <Empty text={isStatic ? "Not re-checked yet. After a fix lands, Arcade re-runs the rule over the patched file and runs your tests." : "Not verified yet. A separate agent re-runs the original attack after the fix."} />
             ))}
 
           {tab === "Timeline" && <TimelineList events={finding.timeline} empty="No timeline events for this finding yet." />}
