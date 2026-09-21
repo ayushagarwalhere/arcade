@@ -5,6 +5,8 @@ import type { GitInfo } from "@arcade/core/desktop";
 import { formatBytes } from "@arcade/core/fs";
 import type { FileInfo } from "./CodeView";
 import { phaseLabel } from "./views/Overview";
+// The one place the version is written down; a copy typed in here had already gone stale once.
+import { version } from "../../package.json";
 
 const ITEM = "flex h-full items-center gap-1 px-2 transition hover:bg-white/[0.07]";
 
@@ -99,7 +101,7 @@ export default function StatusBar({
       <button onClick={onProviders} className={`${ITEM} hidden sm:flex`} title="Agents">
         {agentName ?? "No agent on this machine"}
       </button>
-      <span className="hidden h-full items-center px-2.5 sm:flex">Arcade 0.2.0</span>
+      <span className="hidden h-full items-center px-2.5 sm:flex">Arcade {version}</span>
     </footer>
   );
 }

@@ -1,6 +1,6 @@
 {
   "name": "@arcade/ade",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "productName": "Arcade",
   "description": "Arcade â€” a security ADE for AI-generated software",

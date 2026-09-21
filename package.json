@@ -26,6 +26,8 @@
     "desktop:pack": "npm run desktop:pack -w apps/ade",
     "desktop:build": "npm run desktop:build -w apps/ade",
     "desktop:build:win": "npm run desktop:build:win -w apps/ade",
+    "lock:complete": "node scripts/complete-lockfile.mjs",
+    "lock:check": "node scripts/complete-lockfile.mjs --check",
     "cli": "node packages/cli/arcade.mjs",
     "mcp": "node packages/cli/mcp-server.mjs",
     "cdk": "npm run cdk -w infra --",

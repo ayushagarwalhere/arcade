@@ -64,6 +64,11 @@ jobs:
           node-version: 22
           cache: npm
 
+      # A lockfile written on one OS can silently drop the other platforms' native packages (an npm
+      # bug), and the build then fails on those runners with nothing pointing at the cause. Say so up front.
+      - name: Check the lockfile covers every platform
+        run: node scripts/complete-lockfile.mjs --check
+
       - run: npm ci
 
       # The desktop app ships the CLI's modules (agent runner, git, scanner engine); fail the
