@@ -1,13 +1,52 @@
 {
-  "name": "@arcade/cli",
-  "version": "0.1.0",
-  "description": "Arcade CLI and MCP server — drive the security ADE from the terminal or another agent.",
+  "name": "arcade-security",
+  "version": "0.2.0",
+  "description": "Arcade CLI and MCP server: static security scanning for AI-generated code, verified fixes, SARIF for CI, Docker sandboxes, and a bridge to the coding agents you already use.",
   "type": "module",
   "bin": {
-    "arcade": "./arcade.mjs"
+    "arcade": "./arcade.mjs",
+    "arcade-mcp": "./mcp-server.mjs",
+    "arcade-security": "./arcade.mjs"
   },
+  "files": [
+    "*.mjs",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
-    "mcp": "node ./mcp-server.mjs"
+    "build:engine": "node scripts/build-engine.mjs",
+    "check:engine": "node scripts/build-engine.mjs --check",
+    "test": "node --test",
+    "mcp": "node ./mcp-server.mjs",
+    "prepack": "node scripts/build-engine.mjs --check"
   },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ayushagarwalhere/arcade.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://github.com/ayushagarwalhere/arcade/tree/main/packages/cli#readme",
+  "bugs": {
+    "url": "https://github.com/ayushagarwalhere/arcade/issues"
+  },
+  "keywords": [
+    "security",
+    "sast",
+    "static-analysis",
+    "vulnerability-scanner",
+    "sarif",
+    "mcp",
+    "model-context-protocol",
+    "cli",
+    "ai-generated-code",
+    "coding-agents",
+    "devsecops"
+  ],
   "license": "MIT"
 }

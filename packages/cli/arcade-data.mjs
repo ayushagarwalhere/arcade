@@ -1,6 +1,7 @@
-// Shared, machine-readable snapshot of an Arcade security run.
-// The CLI and the MCP server both read from this so their output stays in
-// sync with the ADE's demo model (packages/core/src/demo.ts).
+// SAMPLE DATA — a fictional security run against a project that does not exist
+// ("acme/commerce-api"). It is printed only by `arcade demo`, under a banner that
+// says so, to show what a full run in the desktop app looks like. No other command
+// and no MCP tool reads this file: they report on the real project they run in.
 
 export const SNAPSHOT = {
   version: "0.1.0",
@@ -84,7 +85,3 @@ export const SNAPSHOT = {
     { time: "09:56", actor: "Verifier", text: "200 OK → 403 Forbidden · 0/64 mutations · VERIFIED" },
   ],
 };
-
-export function findingById(id) {
-  return SNAPSHOT.findings.find((f) => f.id.toLowerCase() === String(id).toLowerCase());
-}
