@@ -14,7 +14,8 @@ export default function Hero() {
   }, []);
 
   return (
-    <section ref={root} className="relative overflow-hidden px-6 pb-16 pt-24 text-center md:pt-32">
+    // z-40: the platform menu hangs below this section, over the showcase's sticky z-30 tab bar.
+    <section ref={root} className="relative z-40 px-6 pb-16 pt-24 text-center md:pt-32">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-[520px] bg-[radial-gradient(60%_60%_at_50%_0%,rgba(255,255,255,0.07),transparent)]" />
       <div className="relative mx-auto max-w-[1200px]">
         <div className="hero-in mx-auto flex w-fit items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] py-1.5 pl-3 pr-4 text-[14px] text-white/70">

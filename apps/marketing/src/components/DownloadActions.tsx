@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { BookOpen, ChevronDown, Download, SquareTerminal } from "lucide-react";
 import { GithubIcon } from "@arcade/ui/components/icons";
@@ -28,7 +28,21 @@ export default function DownloadActions({
 }) {
   const [plat, setPlat] = useState<Plat>("windows");
   const [open, setOpen] = useState(false);
+  const menu = useRef<HTMLDivElement>(null);
   useEffect(() => setPlat(detect()), []);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      if (!menu.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
 
   const current = PLATS.find((p) => p.id === plat)!;
   const others = PLATS.filter((p) => p.id !== plat);
@@ -64,7 +78,7 @@ export default function DownloadActions({
       >
         <SquareTerminal className="h-4 w-4" /> Or open the ADE in your browser — no install
       </a>
-      <div className="relative mt-3">
+      <div ref={menu} className="relative mt-3">
         <button
           onClick={() => setOpen((o) => !o)}
           className="flex items-center gap-1.5 text-[14px] text-white/50 transition hover:text-white/80"

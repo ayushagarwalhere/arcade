@@ -3,7 +3,7 @@ import Reveal from "./Reveal";
 
 export default function FinalCTA() {
   return (
-    <section className="border-t border-white/[0.07] px-6 py-32 text-center">
+    <section className="relative z-10 border-t border-white/[0.07] px-6 py-32 text-center">
       <Reveal>
         <h2 className="h-display mx-auto max-w-[1000px] text-[40px] font-medium md:text-[72px]">
           Build at AI speed.<br />Don&apos;t ship at AI risk.
